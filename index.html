@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#5969B8" />
+  <title>PC Tornooien – 2026</title>
+
+  <link rel="stylesheet" href="./assets/styles.css" />
+</head>
+
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <div class="titleRow">
+        <div>
+          <h1>PC Tornooien 2026</h1>
+          <div class="sub">v7: gestructureerd + status/gespeeld + dropdowns.</div>
+          <div class="ver" id="syncStatus">● offline</div>
+
+        </div>
+        <div class="ver">v7.0</div>
+      </div>
+
+      <div class="controls">
+        <input id="q" class="search" type="search" placeholder="Zoek op club, spelvorm, plaats, team…" autocomplete="off" />
+        <div class="chips" id="chips"></div>
+
+        <div class="chips">
+          <button class="btn primary" id="btnAdd">➕ Tornooi toevoegen</button>
+          <button class="btn ghost" id="btnExport">Export</button>
+          <button class="btn ghost" id="btnImport">Import</button>
+          <button class="btn ghost" id="btnReset" title="Zet alles terug naar de Excel-basis">Reset</button>
+          <button class="btn danger" id="btnClearAll" title="Verwijdert alles">Wis alles</button>
+          <button class="btn ghost" id="btnDownload">Download backup</button>
+          <button class="btn ghost" id="btnArchive">Archiveer seizoen</button>
+
+        </div>
+
+        <div class="hint">
+          Tip: Export regelmatig. Import vervangt je lijst volledig.
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="stat"><div class="k">Totaal (actief)</div><div class="v" id="statTotal">–</div></div>
+        <div class="stat"><div class="k">Zichtbaar</div><div class="v" id="statVisible">–</div></div>
+        <div class="stat"><div class="k">Ingeschreven</div><div class="v" id="statIn">–</div></div>
+        <div class="stat"><div class="k">Eerstvolgende</div><div class="v" id="statNext">–</div></div>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="list" id="list"></div>
+    <div class="footer">Basis: Excel → data/tornooien.json • Bewerkingen: lokaal op je toestel</div>
+  </main>
+
+  <!-- Add / Edit modal -->
+  <div class="modalBackdrop" id="modalEdit">
+    <div class="modal">
+      <div class="modalHeader">
+        <div class="h" id="editTitle">Tornooi</div>
+        <button class="btn" id="btnCloseEdit">Sluiten</button>
+      </div>
+
+      <div class="modalBody">
+        <div class="grid2">
+        <div>
+          <label>Ronden</label>
+          <input type="text" id="fRounds" placeholder="bv. 4 ronden" />
+        </div>
+        <div>
+          <label>Categorie</label>
+         <select id="fCategory">
+            <option value="">(leeg)</option>
+            <option value="50+">50+</option>
+            <option value="AllCat">AllCat</option>
+          </select>
+
+        </div>
+      </div>
+
+        <div class="grid2">
+          <div>
+            <label>Datum</label>
+            <input type="date" id="fDate" />
+          </div>
+          <div>
+            <label>Uur</label>
+            <input type="time" id="fTime" />
+          </div>
+        </div>
+
+        <div>
+          <label>Club / Plaats</label>
+          <select id="fClubSel"></select>
+          <div id="clubCustomWrap" style="display:none; margin-top:10px;">
+            <label>Andere club / plaats</label>
+            <input type="text" id="fClub" placeholder="Typ club/plaats…" />
+          </div>
+        </div>
+
+        <div>
+          <label>Spelvorm</label>
+          <select id="fSpelSel"></select>
+          <div id="spelCustomWrap" style="display:none; margin-top:10px;">
+            <label>Andere spelvorm</label>
+            <input type="text" id="fSpel" placeholder="Typ spelvorm…" />
+          </div>
+        </div>
+
+        <div class="grid2">
+          <div>
+            <label>Status</label>
+            <select id="fStatus">
+              <option value="planned">Gepland</option>
+              <option value="registered">Ingeschreven</option>
+              <option value="paid">Betaald</option>
+              <option value="played">Gespeeld</option>
+            </select>
+          </div>
+
+          <div>
+            <label>Team</label>
+            <select id="fTeamSel"></select>
+            <div id="teamCustomWrap" style="display:none; margin-top:10px;">
+              <label>Andere teamnaam</label>
+              <input type="text" id="fTeam" placeholder="Typ team…" />
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label>Notitie</label>
+          <textarea id="fNote"></textarea>
+        </div>
+
+        <div class="hint">Tip: “Gespeeld” zet het tornooi in de tab Gespeeld (archief).</div>
+      </div>
+
+      <div class="modalFooter">
+        <button class="btn danger" id="btnDelete">🗑️ Verwijderen</button>
+        <button class="btn primary" id="btnSave">Opslaan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Export/Import modal -->
+  <div class="modalBackdrop" id="modalJSON">
+    <div class="modal">
+      <div class="modalHeader">
+        <div class="h" id="jsonTitle">Export</div>
+        <button class="btn" id="btnCloseJSON">Sluiten</button>
+      </div>
+      <div class="modalBody">
+        <div class="hint" id="jsonHint"></div>
+        <textarea id="jsonBox" spellcheck="false" style="min-height:220px;"></textarea>
+      </div>
+      <div class="modalFooter">
+        <button class="btn" id="btnCopyJSON">Kopieer</button>
+        <button class="btn primary" id="btnApplyJSON" style="display:none;">Importeer</button>
+      </div>
+    </div>
+  </div>
+  <!-- Undo Toast -->
+<div class="toast" id="toast" aria-live="polite" aria-atomic="true">
+  <div class="toastText" id="toastText"></div>
+  <button class="btn ghost toastBtn" id="toastUndo" type="button">Ongedaan maken</button>
+  <button class="btn ghost toastBtn" id="toastClose" type="button">✕</button>
+</div>
+
+  <script type="module" src="./assets/app.js"></script>
+</body>
+</html>
