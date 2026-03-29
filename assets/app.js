@@ -33,7 +33,6 @@ const btnDelete = document.getElementById("btnDelete");
 const btnDownload = document.getElementById("btnDownload");
 const btnArchive = document.getElementById("btnArchive");
 
-
 const fDate = document.getElementById("fDate");
 const fTime = document.getElementById("fTime");
 
@@ -104,9 +103,9 @@ function ensureArrayData(){
   DATA = [];
 }
 
-//===========================
-//Download
-//==========================
+// ===========================
+// Download
+// ===========================
 function downloadBackup(){
   const payload = {
     app: "pc-tornooien",
@@ -114,6 +113,7 @@ function downloadBackup(){
     exported_at: new Date().toISOString(),
     tournaments: DATA
   };
+
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
 
@@ -128,10 +128,15 @@ function downloadBackup(){
   showToast?.({ text: "Backup gedownload." });
 }
 
+function autoBackupAfterSave(){
+  setTimeout(() => {
+    downloadBackup();
+  }, 300);
+}
+
 // ============================
 // Normalization
 // ============================
-
 function stableId({date_iso, club, spel, time}){
   return [
     (date_iso || "").slice(0,10),
@@ -198,7 +203,6 @@ function wireCustomSelect(selEl, wrapEl, inputEl){
     if(!isCustom){
       inputEl.value = selEl.value || "";
     } else {
-      // focus naar input (handig op iPhone)
       setTimeout(() => inputEl.focus(), 0);
     }
   }
@@ -268,11 +272,8 @@ function matchesChip(item){
       return true;
     case "Komend":
       return item.status_code !== STATUS.PLAYED && !isPast;
-    //case "Ingeschreven":
-      //return item.status_code === STATUS.REGISTERED;
     case "Ingeschreven":
       return item.status_code === STATUS.REGISTERED || item.status_code === STATUS.PAID;
-  
     case "Betaald":
       return item.status_code === STATUS.PAID;
     case "Gespeeld":
@@ -374,42 +375,39 @@ function render(){
     ? filtered.map(card).join("")
     : `<div class="empty">Geen resultaten.</div>`;
 
- // Stats
-const today0 = todayMidnight();
+  const today0 = todayMidnight();
 
-const active = DATA.filter(x => {
-  const sc = String(x.status_code || "");
-  const legacy = String(x.status || "").toLowerCase();
+  const active = DATA.filter(x => {
+    const sc = String(x.status_code || "");
+    const legacy = String(x.status || "").toLowerCase();
 
-  const d = new Date((x.date_iso || "") + "T00:00:00");
-  const isPast = !Number.isNaN(d.getTime()) && d < today0;
+    const d = new Date((x.date_iso || "") + "T00:00:00");
+    const isPast = !Number.isNaN(d.getTime()) && d < today0;
 
-  const isPlayed =
-    sc === STATUS.PLAYED ||
-    legacy.includes("gespeeld") ||
-    isPast;
+    const isPlayed =
+      sc === STATUS.PLAYED ||
+      legacy.includes("gespeeld") ||
+      isPast;
 
-  return !isPlayed;
-});
+    return !isPlayed;
+  });
 
-statTotal.textContent = active.length;
-statVisible.textContent = filtered.length;
-statIn.textContent = DATA.filter(x => x.status_code === STATUS.REGISTERED).length;
+  statTotal.textContent = active.length;
+  statVisible.textContent = filtered.length;
+  statIn.textContent = DATA.filter(x => x.status_code === STATUS.REGISTERED).length;
 
-const next = DATA
-  .filter(x => x.status_code !== STATUS.PLAYED)
-  .map(x => ({...x, d: new Date((x.date_iso || "") + "T00:00:00")}))
-  .filter(x => !Number.isNaN(x.d.getTime()) && x.d >= today0)
-  .sort((a,b) => a.d - b.d)[0];
+  const next = DATA
+    .filter(x => x.status_code !== STATUS.PLAYED)
+    .map(x => ({...x, d: new Date((x.date_iso || "") + "T00:00:00")}))
+    .filter(x => !Number.isNaN(x.d.getTime()) && x.d >= today0)
+    .sort((a,b) => a.d - b.d)[0];
 
-statNext.textContent = next ? next.date : "—";
-
+  statNext.textContent = next ? next.date : "—";
 }
 
 // ============================
 // API save helpers
 // ============================
-
 function setSyncStatus(state, text){
   if(!syncStatusEl) return;
   syncStatusEl.classList.remove("ok","bad");
@@ -489,18 +487,16 @@ function openEdit(id){
   wireCustomSelect(fTeamSel, teamCustomWrap, fTeam);
 
   if(fRounds) fRounds.value = item.rounds || "";
- 
+
   const cat = (item.category || "").trim();
   const normalizedCat =
     (cat === "AC" || cat.toLowerCase() === "all categorieen" || cat.toLowerCase() === "alle categorieen")
-    ? "AllCat"
-    : cat;
+      ? "AllCat"
+      : cat;
 
-  // Als leeg of onbekend -> default 50+
   const finalCat = (normalizedCat === "" || normalizedCat === "leeg") ? "50+" : normalizedCat;
 
   if(fCategory) fCategory.value = finalCat;
-
 
   fNote.value = item.note || "";
 
@@ -533,6 +529,13 @@ async function saveFromModal(){
 
   const item = normalizeItem(base, Date.now());
 
+  if(item.status_code === STATUS.PLAYED && !item.played_at){
+    item.played_at = new Date().toISOString();
+  }
+  if(item.status_code !== STATUS.PLAYED){
+    item.played_at = "";
+  }
+
   ensureArrayData();
 
   let next;
@@ -542,21 +545,14 @@ async function saveFromModal(){
     next = [...DATA, item];
   }
 
-  // played_at consistent houden
-  if(item.status_code === STATUS.PLAYED && !item.played_at){
-    item.played_at = new Date().toISOString();
-  }
-  if(item.status_code !== STATUS.PLAYED){
-    item.played_at = "";
-  }
-
-  next.sort((a,b)=>a.date_iso.localeCompare(b.date_iso));
+  next.sort((a,b) => a.date_iso.localeCompare(b.date_iso));
 
   try{
     await replaceAll(next);
     closeEdit();
     render();
-    showToast({ text: "Opgeslagen." });
+    showToast({ text: "Opgeslagen. Backup wordt gedownload." });
+    autoBackupAfterSave();
   }catch(e){
     alert("Opslaan mislukt: " + (e?.message || e));
   }
@@ -576,6 +572,7 @@ async function deleteFromModal(){
     await replaceAll(next);
     closeEdit();
     render();
+    autoBackupAfterSave();
 
     showToast({
       text: "Tornooi verwijderd.",
@@ -589,6 +586,7 @@ async function deleteFromModal(){
     alert("Verwijderen mislukt: " + (e?.message || e));
   }
 }
+
 async function doArchiveSeason(){
   const year = prompt("Welk jaar archiveren? (bv. 2026)", "2026");
   if(!year) return;
@@ -601,7 +599,6 @@ async function doArchiveSeason(){
 
   try{
     const res = await archiveSeason({ year, mode });
-    // herlaad van server
     await syncFromServer({ silent: true });
     showToast?.({ text: `Gearchiveerd: ${year}` });
     alert(`OK.\nArchief: ${res.archived_to}\nReset: ${res.reset}`);
@@ -639,7 +636,9 @@ function openJSON(mode){
   jsonBox.focus();
 }
 
-function closeJSON(){ modalJSON.classList.remove("show"); }
+function closeJSON(){
+  modalJSON.classList.remove("show");
+}
 
 async function copyJSON(){
   try{
@@ -664,7 +663,8 @@ async function applyJSON(){
     await replaceAll(cleaned);
     closeJSON();
     render();
-    alert("Import OK.");
+    autoBackupAfterSave();
+    alert("Import OK. Backup wordt ook gedownload.");
   }catch(e){
     alert("Import mislukt: " + (e?.message || e));
   }
@@ -674,8 +674,6 @@ async function applyJSON(){
 // Reset / Clear (API)
 // ============================
 async function resetToEmpty(){
-  // In API-modus hebben we geen "Excel basis" meer als bron.
-  // Reset = leegmaken.
   if(!confirm("Reset = alles leegmaken. Doorgaan?")) return;
   try{
     await clearAll();
@@ -728,6 +726,7 @@ function bindListClicksOnce(){
       try{
         await updateItem(id, { status_code: STATUS.PLAYED, played_at: new Date().toISOString() });
         render();
+        autoBackupAfterSave();
 
         showToast({
           text: "Verplaatst naar Gespeeld.",
@@ -754,6 +753,7 @@ function bindListClicksOnce(){
       try{
         await updateItem(id, { status_code: STATUS.PLANNED, played_at: "" });
         render();
+        autoBackupAfterSave();
 
         showToast({
           text: "Teruggezet naar Komend.",
@@ -773,17 +773,17 @@ function bindListClicksOnce(){
     }
   });
 }
+
 // ============================
 // Init helpers
 // ============================
 let _lastServerSnapshot = "";
 
 async function syncFromServer({ silent = true } = {}){
-  // Als je modal open staat: niet “automatisch” overschrijven
   if(modalEdit?.classList.contains("show")) return;
 
   try{
-    const arr = await loadAll();              // uit store.js (API/cache)
+    const arr = await loadAll();
     const next = Array.isArray(arr) ? arr.map(normalizeItem).filter(x => x.date_iso) : [];
 
     const snap = JSON.stringify(next);
@@ -812,19 +812,23 @@ btnImport.addEventListener("click", () => openJSON("import"));
 btnReset.addEventListener("click", resetToEmpty);
 btnClearAll.addEventListener("click", clearEverything);
 btnDownload?.addEventListener("click", downloadBackup);
-btnArchive?.addEventListener("click", doArchiveSeason);  // ✅ HIER
+btnArchive?.addEventListener("click", doArchiveSeason);
 
 // modal edit
 btnCloseEdit.addEventListener("click", closeEdit);
 btnSave.addEventListener("click", () => { saveFromModal(); });
 btnDelete.addEventListener("click", () => { deleteFromModal(); });
-modalEdit.addEventListener("click", (e) => { if(e.target === modalEdit) closeEdit(); });
+modalEdit.addEventListener("click", (e) => {
+  if(e.target === modalEdit) closeEdit();
+});
 
 // modal json
 btnCloseJSON.addEventListener("click", closeJSON);
 btnCopyJSON.addEventListener("click", copyJSON);
 btnApplyJSON.addEventListener("click", () => { applyJSON(); });
-modalJSON.addEventListener("click", (e) => { if(e.target === modalJSON) closeJSON(); });
+modalJSON.addEventListener("click", (e) => {
+  if(e.target === modalJSON) closeJSON();
+});
 
 // init
 (async () => {
@@ -832,14 +836,12 @@ modalJSON.addEventListener("click", (e) => { if(e.target === modalJSON) closeJSO
     const arr = await loadAll();
     DATA = Array.isArray(arr) ? arr.map(normalizeItem).filter(x => x.date_iso) : [];
 
-    // ✅ 2C: snapshot + status init
     _lastServerSnapshot = JSON.stringify(DATA);
     setSyncStatus("ok", "● online");
 
     bindListClicksOnce();
     render();
 
-    // ✅ 2C: 1x extra sync (pakt direct eventuele recente wijzigingen)
     await syncFromServer({ silent: true });
 
   }catch(e){
