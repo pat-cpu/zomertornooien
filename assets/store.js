@@ -1,5 +1,4 @@
-const API_URL = "/api/tournaments";
-const ARCHIVE_URL = "/api/archive";
+const DATA_URL = "./data/tornooien.json";
 const STORAGE_KEY_CACHE = "pc_tornooien_cache_v7";
 
 function _asArray(payload) {
@@ -32,7 +31,7 @@ export function writeCache(arr) {
 }
 
 export async function fetchServerAll() {
-  const r = await fetch(API_URL, {
+  const r = await fetch(DATA_URL, {
     method: "GET",
     cache: "no-store",
     headers: {
@@ -41,71 +40,42 @@ export async function fetchServerAll() {
   });
 
   if (!r.ok) {
-    throw new Error(`API GET mislukt (${r.status})`);
+    throw new Error(`JSON laden mislukt (${r.status})`);
   }
 
   const payload = await r.json();
   const arr = _asArray(payload);
 
   if (!arr) {
-    throw new Error("API payload is not a list");
+    throw new Error("JSON payload is not a list");
   }
 
   return arr;
 }
 
 export async function loadAll() {
-  // Altijd eerst server proberen
   try {
     const arr = await fetchServerAll();
     writeCache(arr);
     return arr;
   } catch (e) {
-    console.warn("Server laden mislukt, fallback naar cache:", e);
+    console.warn("JSON laden mislukt, fallback naar cache:", e);
   }
 
-  // Alleen fallback
   return readCache();
 }
 
 export async function saveAll(arr) {
   const data = Array.isArray(arr) ? arr : [];
-
-  const r = await fetch(API_URL, {
-    method: "POST",
-    cache: "no-store",
-    headers: {
-      "Content-Type": "application/json",
-      "Accept": "application/json"
-    },
-    body: JSON.stringify(data)
-  });
-
-  if (!r.ok) {
-    throw new Error(`Opslaan naar server mislukt (${r.status})`);
-  }
-
   writeCache(data);
+
+  throw new Error("Opslaan naar GitHub Pages kan niet. Gebruik Export/Import of werk de JSON in GitHub bij.");
 }
 
 export async function clearAll() {
-  await saveAll([]);
+  writeCache([]);
 }
 
-export async function archiveSeason({ year = "", mode = "empty" } = {}) {
-  const r = await fetch(ARCHIVE_URL, {
-    method: "POST",
-    cache: "no-store",
-    headers: {
-      "Content-Type": "application/json",
-      "Accept": "application/json"
-    },
-    body: JSON.stringify({ year, mode })
-  });
-
-  if (!r.ok) {
-    throw new Error(`Archiveren mislukt (${r.status})`);
-  }
-
-  return await r.json();
+export async function archiveSeason() {
+  throw new Error("Archiveren kan niet op GitHub Pages zonder backend.");
 }
