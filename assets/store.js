@@ -1,4 +1,5 @@
 const API_URL = "/api/tournaments";
+const ARCHIVE_URL = "/api/archive";
 const STORAGE_KEY_CACHE = "pc_tornooien_cache_v7";
 
 function _asArray(payload) {
@@ -7,60 +8,84 @@ function _asArray(payload) {
   return null;
 }
 
-export async function loadAll() {
-  // 1) Eerst lokale cache
+export function getCacheKey() {
+  return STORAGE_KEY_CACHE;
+}
+
+export function readCache() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_CACHE);
     const payload = raw ? JSON.parse(raw) : null;
-    const arr = _asArray(payload);
-    if (arr && arr.length) {
-      return arr;
-    }
+    return _asArray(payload) ?? [];
   } catch (e) {
     console.warn("Cache lezen mislukt:", e);
+    return [];
   }
+}
 
-  // 2) Alleen als cache leeg is: server proberen
+export function writeCache(arr) {
   try {
-    const r = await fetch(API_URL, { cache: "no-store" });
-    if (!r.ok) throw new Error("API not ok");
-
-    const payload = await r.json();
-    const arr = _asArray(payload);
-
-    if (arr) {
-      localStorage.setItem(STORAGE_KEY_CACHE, JSON.stringify(arr));
-      return arr;
-    }
-
-    throw new Error("API payload is not a list");
+    localStorage.setItem(STORAGE_KEY_CACHE, JSON.stringify(arr ?? []));
   } catch (e) {
-    console.warn("Server laden mislukt:", e);
+    console.warn("Cache schrijven mislukt:", e);
+  }
+}
+
+export async function fetchServerAll() {
+  const r = await fetch(API_URL, {
+    method: "GET",
+    cache: "no-store",
+    headers: {
+      "Accept": "application/json"
+    }
+  });
+
+  if (!r.ok) {
+    throw new Error(`API GET mislukt (${r.status})`);
   }
 
-  return [];
+  const payload = await r.json();
+  const arr = _asArray(payload);
+
+  if (!arr) {
+    throw new Error("API payload is not a list");
+  }
+
+  return arr;
+}
+
+export async function loadAll() {
+  // Altijd eerst server proberen
+  try {
+    const arr = await fetchServerAll();
+    writeCache(arr);
+    return arr;
+  } catch (e) {
+    console.warn("Server laden mislukt, fallback naar cache:", e);
+  }
+
+  // Alleen fallback
+  return readCache();
 }
 
 export async function saveAll(arr) {
-  const data = arr ?? [];
+  const data = Array.isArray(arr) ? arr : [];
 
-  // Altijd eerst lokaal bewaren
-  localStorage.setItem(STORAGE_KEY_CACHE, JSON.stringify(data));
+  const r = await fetch(API_URL, {
+    method: "POST",
+    cache: "no-store",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json"
+    },
+    body: JSON.stringify(data)
+  });
 
-  // Daarna server proberen, maar lokale data blijft leidend
-  try {
-    const r = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data)
-    });
-
-    if (!r.ok) {
-      throw new Error("Opslaan naar server mislukt");
-    }
-  } catch (e) {
-    console.warn("Server save mislukt, lokale cache blijft bewaard:", e);
+  if (!r.ok) {
+    throw new Error(`Opslaan naar server mislukt (${r.status})`);
   }
+
+  writeCache(data);
 }
 
 export async function clearAll() {
@@ -68,12 +93,19 @@ export async function clearAll() {
 }
 
 export async function archiveSeason({ year = "", mode = "empty" } = {}) {
-  const r = await fetch("/api/archive", {
+  const r = await fetch(ARCHIVE_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    cache: "no-store",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json"
+    },
     body: JSON.stringify({ year, mode })
   });
 
-  if (!r.ok) throw new Error("Archiveren mislukt");
+  if (!r.ok) {
+    throw new Error(`Archiveren mislukt (${r.status})`);
+  }
+
   return await r.json();
 }
