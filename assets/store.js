@@ -68,8 +68,7 @@ export async function loadAll() {
 export async function saveAll(arr) {
   const data = Array.isArray(arr) ? arr : [];
   writeCache(data);
-
-  throw new Error("Opslaan naar GitHub Pages kan niet. Gebruik Export/Import of werk de JSON in GitHub bij.");
+  return true;
 }
 
 export async function clearAll() {
@@ -77,5 +76,5 @@ export async function clearAll() {
 }
 
 export async function archiveSeason() {
-  throw new Error("Archiveren kan niet op GitHub Pages zonder backend.");
+  throw new Error("Archiveren is uitgeschakeld op GitHub Pages.");
 }
