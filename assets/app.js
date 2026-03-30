@@ -1,14 +1,12 @@
 import {
   escapeHtml, norm, toDisplayDate, todayMidnight,
-  STATUS, statusFromLegacyText, statusLabel
+  STATUS, statusFromLegacyText
 } from "./model.js";
 
 import {
   loadAll,
   saveAll,
   clearAll,
-  archiveSeason,
-  fetchServerAll,
   readCache,
   writeCache
 } from "./store.js";
@@ -84,22 +82,35 @@ const toastCloseBtn = document.getElementById("toastClose");
 let DATA = [];
 let activeChip = "Komend";
 let editingId = null;
-let _lastServerSnapshot = "";
 let _listClickBound = false;
-let _syncInFlight = false;
+let _loadError = "";
 
-const POLL_MS = 30000;
-
-const CHIP_ITEMS = ["Komend", "Ingeschreven", "Betaald", "Gespeeld", "Alles"];
+const CHIP_ITEMS = ["Komend", "Alles"];
 
 const CLUB_CHOICES = [
   "PC Mistral", "PC Schorpioen", "PC Verbroedering", "PC Haeseveld", "PC Reinaert",
-  "PC Donkmeer", "PC Alosta", "PC LOBOS"
+  "PC Donkmeer", "PC Alosta", "PC LOBOS", "KPC Mistral", "KPC Schorpioen",
+  "PC Singel, Grimbergen"
 ];
 
 const SPEL_CHOICES = [
-  "Doublet gemengd", "Doublet Dames", "Doublet Heren",
-  "Triplet gemengd", "Triplet Dames"
+  "Doublet gemengd",
+  "Doublet Dames",
+  "Doublet Heren",
+  "Doublet",
+  "Triplet",
+  "Triplet gemengd",
+  "Triplet Dames",
+  "Damesdoublet",
+  "Dames triplet",
+  "H/G Triplet",
+  "H/G doublet",
+  "H/G Triplet kleurentornooi",
+  "Doublet, 1 dame 1 heer",
+  "Heren gemeng doublet, Doublet",
+  "Kwartetten min 1 dame",
+  "Kwartetten min 2 dames",
+  "Triplet, Doublet"
 ];
 
 const TEAM_CHOICES_BASE = ["A", "B", "C", "D"];
@@ -124,6 +135,12 @@ function todayLocalISO() {
   const now = new Date();
   const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
   return local.toISOString().slice(0, 10);
+}
+
+function setData(next, { loadError = _loadError } = {}) {
+  DATA = normalizeList(next);
+  _loadError = loadError;
+  render();
 }
 
 // ===========================
@@ -154,7 +171,7 @@ function downloadBackup() {
 
 function autoBackupAfterSave() {
   showToast({
-    text: 'Opgeslagen. Tik nu op "Download backup" om je backup te bewaren.'
+    text: 'Lokaal opgeslagen. Tik nu op "Download backup" om je backup te bewaren.'
   });
 }
 
@@ -210,10 +227,6 @@ function normalizeList(arr) {
       if (d !== 0) return d;
       return String(a.id).localeCompare(String(b.id));
     });
-}
-
-function snapshotOf(arr) {
-  return JSON.stringify(normalizeList(arr));
 }
 
 // ============================
@@ -324,16 +337,9 @@ function matchesChip(item) {
   const isPast = !Number.isNaN(d.getTime()) && d < today;
 
   switch (activeChip) {
-    case "Alles":
-      return true;
     case "Komend":
-      return item.status_code !== STATUS.PLAYED && !isPast;
-    case "Ingeschreven":
-      return item.status_code === STATUS.REGISTERED || item.status_code === STATUS.PAID;
-    case "Betaald":
-      return item.status_code === STATUS.PAID;
-    case "Gespeeld":
-      return item.status_code === STATUS.PLAYED || isPast;
+      return !isPast;
+    case "Alles":
     default:
       return true;
   }
@@ -343,7 +349,7 @@ function matchesQuery(item, q) {
   if (!q) return true;
   const hay = [
     item.date, item.club, item.spel, item.category,
-    item.time, item.rounds, item.team, statusLabel(item.status_code), item.note
+    item.time, item.rounds, item.team, item.note
   ].join(" ").toLowerCase();
   return hay.includes(q.toLowerCase());
 }
@@ -368,18 +374,8 @@ function renderChips() {
 }
 
 function actionButtons(item) {
-  if (activeChip === "Gespeeld") {
-    return `
-      <div class="cardActions">
-        <button class="btn ghost" data-act="unplay" data-id="${escapeHtml(item.id)}">↩️ Terugzetten</button>
-        <button class="btn ghost" data-act="edit" data-id="${escapeHtml(item.id)}">✏️ Bewerken</button>
-      </div>
-    `;
-  }
-
   return `
     <div class="cardActions">
-      <button class="btn primary" data-act="play" data-id="${escapeHtml(item.id)}">✅ Gespeeld</button>
       <button class="btn ghost" data-act="edit" data-id="${escapeHtml(item.id)}">✏️ Bewerken</button>
     </div>
   `;
@@ -388,7 +384,6 @@ function actionButtons(item) {
 function card(item) {
   const badges = [];
   if (item.category) badges.push(`<span class="badge">${escapeHtml(item.category)}</span>`);
-  badges.push(`<span class="badge ok">${escapeHtml(statusLabel(item.status_code))}</span>`);
 
   const meta = [
     ["Spelvorm", item.spel || "—"],
@@ -427,42 +422,37 @@ function render() {
   const q = (qEl.value || "").trim();
   const filtered = DATA.filter(matchesChip).filter(x => matchesQuery(x, q));
 
-  listEl.innerHTML = filtered.length
-    ? filtered.map(card).join("")
-    : `<div class="empty">Geen resultaten.</div>`;
+  if (!filtered.length) {
+    if (_loadError && !DATA.length) {
+      listEl.innerHTML = `<div class="empty">Fout bij laden: ${escapeHtml(_loadError)}</div>`;
+    } else {
+      listEl.innerHTML = `<div class="empty">Geen resultaten.</div>`;
+    }
+  } else {
+    listEl.innerHTML = filtered.map(card).join("");
+  }
 
   const today0 = todayMidnight();
 
-  const active = DATA.filter(x => {
-    const sc = String(x.status_code || "");
-    const legacy = String(x.status || "").toLowerCase();
-
+  const upcoming = DATA.filter(x => {
     const d = new Date((x.date_iso || "") + "T00:00:00");
-    const isPast = !Number.isNaN(d.getTime()) && d < today0;
-
-    const isPlayed =
-      sc === STATUS.PLAYED ||
-      legacy.includes("gespeeld") ||
-      isPast;
-
-    return !isPlayed;
+    return !Number.isNaN(d.getTime()) && d >= today0;
   });
 
-  statTotal.textContent = active.length;
+  statTotal.textContent = upcoming.length;
   statVisible.textContent = filtered.length;
-  statIn.textContent = DATA.filter(x => x.status_code === STATUS.REGISTERED).length;
 
-  const next = DATA
-    .filter(x => x.status_code !== STATUS.PLAYED)
+  if (statIn) statIn.textContent = "—";
+
+  const next = upcoming
     .map(x => ({ ...x, d: new Date((x.date_iso || "") + "T00:00:00") }))
-    .filter(x => !Number.isNaN(x.d.getTime()) && x.d >= today0)
     .sort((a, b) => a.d - b.d)[0];
 
   statNext.textContent = next ? next.date : "—";
 }
 
 // ============================
-// API save helpers
+// Save helpers
 // ============================
 function setSyncStatus(state, text) {
   if (!syncStatusEl) return;
@@ -472,61 +462,30 @@ function setSyncStatus(state, text) {
   syncStatusEl.textContent = text;
 }
 
-async function syncFromServer({ silent = true, force = false } = {}) {
-  if (_syncInFlight) return;
-  if (!force && modalEdit?.classList.contains("show")) return;
-
-  _syncInFlight = true;
-
-  try {
-    const arr = await fetchServerAll();
-    const next = normalizeList(arr);
-    const snap = JSON.stringify(next);
-
-    if (snap !== _lastServerSnapshot) {
-      DATA = next;
-      _lastServerSnapshot = snap;
-      writeCache(next);
-      render();
-    }
-
-    setSyncStatus("ok", "● server gesynchroniseerd");
-  } catch (e) {
-    setSyncStatus("bad", "● offline");
-    if (!silent) alert("Sync mislukt: " + (e?.message || e));
-  } finally {
-    _syncInFlight = false;
-  }
-}
-
 async function replaceAll(next) {
-  ensureArrayData();
   const arr = normalizeList(next);
-
-  // Conflictcontrole: alleen blokkeren als server intussen echt anders is
-  const serverNow = normalizeList(await fetchServerAll());
-  const serverSnap = JSON.stringify(serverNow);
-
-  if (serverSnap !== _lastServerSnapshot) {
-    DATA = serverNow;
-    _lastServerSnapshot = serverSnap;
-    writeCache(serverNow);
-    render();
-    setSyncStatus("bad", "● conflict gedetecteerd");
-    throw new Error("De lijst is gewijzigd op een ander toestel. Je scherm is ververst.");
-  }
-
   await saveAll(arr);
-  DATA = arr;
-  _lastServerSnapshot = JSON.stringify(arr);
+  setData(arr, { loadError: "" });
   writeCache(arr);
-  setSyncStatus("ok", "● server bewaard");
+  setSyncStatus("ok", "● lokaal bewaard");
 }
 
-async function updateItem(id, patch) {
-  ensureArrayData();
-  const next = DATA.map(x => (String(x.id) === String(id)) ? ({ ...x, ...patch }) : x);
-  await replaceAll(next);
+async function refreshFromSource() {
+  try {
+    const arr = await loadAll();
+    setData(arr, { loadError: "" });
+    writeCache(DATA);
+    setSyncStatus("ok", "● geladen");
+  } catch (e) {
+    const cached = normalizeList(readCache());
+    setData(cached, { loadError: e?.message || String(e) });
+
+    if (cached.length) {
+      setSyncStatus("bad", "● offline, cache actief");
+    } else {
+      setSyncStatus("bad", "● offline");
+    }
+  }
 }
 
 // ============================
@@ -552,7 +511,7 @@ function openAdd() {
 
   fClub.value = "";
   fSpel.value = "";
-  fStatus.value = STATUS.PLANNED;
+  if (fStatus) fStatus.value = STATUS.PLANNED;
   fTeam.value = "";
 
   if (fRounds) fRounds.value = "";
@@ -561,8 +520,8 @@ function openAdd() {
 
   refreshModalSelects();
 
-  btnDelete.style.display = "none";
-  modalEdit.classList.add("show");
+  if (btnDelete) btnDelete.style.display = "none";
+  if (modalEdit) modalEdit.classList.add("show");
 }
 
 function openEdit(id) {
@@ -578,7 +537,7 @@ function openEdit(id) {
 
   fClub.value = item.club || "";
   fSpel.value = item.spel || "";
-  fStatus.value = item.status_code || STATUS.PLANNED;
+  if (fStatus) fStatus.value = item.status_code || STATUS.PLANNED;
   fTeam.value = item.team || "";
 
   if (fRounds) fRounds.value = item.rounds || "";
@@ -597,12 +556,12 @@ function openEdit(id) {
 
   refreshModalSelects();
 
-  btnDelete.style.display = "inline-block";
-  modalEdit.classList.add("show");
+  if (btnDelete) btnDelete.style.display = "inline-block";
+  if (modalEdit) modalEdit.classList.add("show");
 }
 
 function closeEdit() {
-  modalEdit.classList.remove("show");
+  if (modalEdit) modalEdit.classList.remove("show");
 }
 
 async function saveFromModal() {
@@ -619,19 +578,12 @@ async function saveFromModal() {
     spel: fSpel.value,
     category: (fCategory && fCategory.value === "AC") ? "AllCat" : (fCategory ? fCategory.value : ""),
     rounds: fRounds ? fRounds.value : "",
-    status_code: fStatus.value,
+    status_code: fStatus ? fStatus.value : STATUS.PLANNED,
     team: fTeam.value,
     note: fNote.value
   };
 
   const item = normalizeItem(base, Date.now());
-
-  if (item.status_code === STATUS.PLAYED && !item.played_at) {
-    item.played_at = new Date().toISOString();
-  }
-  if (item.status_code !== STATUS.PLAYED) {
-    item.played_at = "";
-  }
 
   ensureArrayData();
 
@@ -645,7 +597,6 @@ async function saveFromModal() {
   try {
     await replaceAll(next);
     closeEdit();
-    render();
     autoBackupAfterSave();
   } catch (e) {
     alert("Opslaan mislukt: " + (e?.message || e));
@@ -665,7 +616,6 @@ async function deleteFromModal() {
   try {
     await replaceAll(next);
     closeEdit();
-    render();
     autoBackupAfterSave();
 
     showToast({
@@ -673,31 +623,10 @@ async function deleteFromModal() {
       undoFn: async () => {
         const restored = normalizeList([...DATA, removed]);
         await replaceAll(restored);
-        render();
       }
     });
   } catch (e) {
     alert("Verwijderen mislukt: " + (e?.message || e));
-  }
-}
-
-async function doArchiveSeason() {
-  const year = prompt("Welk jaar archiveren? (bv. 2026)", "2026");
-  if (!year) return;
-
-  const mode = confirm("Na archiveren: OK = leeg starten. Annuleer = reset naar base.")
-    ? "empty"
-    : "base";
-
-  if (!confirm(`Bevestig: archiveer ${year} en reset live (${mode}).`)) return;
-
-  try {
-    const res = await archiveSeason({ year, mode });
-    await syncFromServer({ silent: true, force: true });
-    showToast({ text: `Gearchiveerd: ${year}` });
-    alert(`OK.\nArchief: ${res.archived_to}\nReset: ${res.reset}`);
-  } catch (e) {
-    alert("Archiveren mislukt: " + (e?.message || e));
   }
 }
 
@@ -708,6 +637,8 @@ let jsonMode = "export";
 
 function openJSON(mode) {
   jsonMode = mode;
+  if (!modalJSON) return;
+
   modalJSON.classList.add("show");
 
   if (mode === "export") {
@@ -731,7 +662,7 @@ function openJSON(mode) {
 }
 
 function closeJSON() {
-  modalJSON.classList.remove("show");
+  if (modalJSON) modalJSON.classList.remove("show");
 }
 
 async function copyJSON() {
@@ -755,7 +686,6 @@ async function applyJSON() {
 
     await replaceAll(cleaned);
     closeJSON();
-    render();
     autoBackupAfterSave();
     alert('Import OK. Tik nu op "Download backup".');
   } catch (e) {
@@ -764,32 +694,16 @@ async function applyJSON() {
 }
 
 // ============================
-// Reset / Clear (API)
+// Clear
 // ============================
-async function resetToEmpty() {
-  if (!confirm("Reset = alles leegmaken. Doorgaan?")) return;
-  try {
-    await clearAll();
-    DATA = [];
-    _lastServerSnapshot = JSON.stringify(DATA);
-    writeCache(DATA);
-    render();
-    setSyncStatus("ok", "● server bewaard");
-    showToast({ text: "Leeggemaakt." });
-  } catch (e) {
-    alert("Reset mislukt: " + (e?.message || e));
-  }
-}
-
 async function clearEverything() {
-  if (prompt('Dit wist ALLES. Typ WIS om te bevestigen:') !== "WIS") return;
+  if (!confirm("Alles leegmaken. Doorgaan?")) return;
+
   try {
     await clearAll();
-    DATA = [];
-    _lastServerSnapshot = JSON.stringify(DATA);
+    setData([], { loadError: "" });
     writeCache(DATA);
-    render();
-    setSyncStatus("ok", "● server bewaard");
+    setSyncStatus("ok", "● lokaal leeggemaakt");
     showToast({ text: "Alles gewist." });
   } catch (e) {
     alert("Wissen mislukt: " + (e?.message || e));
@@ -812,73 +726,6 @@ function bindListClicksOnce() {
 
     if (act === "edit") {
       openEdit(id);
-      return;
-    }
-
-    if (act === "play") {
-      ensureArrayData();
-      const before = DATA.find(x => String(x.id) === String(id));
-      if (!before) return;
-
-      try {
-        await updateItem(id, {
-          status_code: STATUS.PLAYED,
-          played_at: new Date().toISOString()
-        });
-        render();
-        autoBackupAfterSave();
-
-        showToast({
-          text: "Verplaatst naar Gespeeld.",
-          undoFn: async () => {
-            try {
-              await updateItem(id, {
-                status_code: before.status_code,
-                played_at: before.played_at || ""
-              });
-              render();
-            } catch (e) {
-              alert("Undo mislukt: " + (e?.message || e));
-            }
-          }
-        });
-      } catch (e) {
-        alert("Opslaan mislukt: " + (e?.message || e));
-      }
-      return;
-    }
-
-    if (act === "unplay") {
-      ensureArrayData();
-      const before = DATA.find(x => String(x.id) === String(id));
-      if (!before) return;
-
-      try {
-        await updateItem(id, {
-          status_code: STATUS.PLANNED,
-          played_at: ""
-        });
-        render();
-        autoBackupAfterSave();
-
-        showToast({
-          text: "Teruggezet naar Komend.",
-          undoFn: async () => {
-            try {
-              await updateItem(id, {
-                status_code: before.status_code,
-                played_at: before.played_at || ""
-              });
-              render();
-            } catch (e) {
-              alert("Undo mislukt: " + (e?.message || e));
-            }
-          }
-        });
-      } catch (e) {
-        alert("Opslaan mislukt: " + (e?.message || e));
-      }
-      return;
     }
   });
 }
@@ -886,29 +733,31 @@ function bindListClicksOnce() {
 // ============================
 // Wire events + init
 // ============================
-qEl.addEventListener("input", render);
+qEl?.addEventListener("input", render);
 
-btnAdd.addEventListener("click", openAdd);
-btnExport.addEventListener("click", () => openJSON("export"));
-btnImport.addEventListener("click", () => openJSON("import"));
-btnReset.addEventListener("click", resetToEmpty);
-btnClearAll.addEventListener("click", clearEverything);
+btnAdd?.addEventListener("click", openAdd);
+btnExport?.addEventListener("click", () => openJSON("export"));
+btnImport?.addEventListener("click", () => openJSON("import"));
+btnReset?.addEventListener("click", clearEverything);
 btnDownload?.addEventListener("click", downloadBackup);
-btnArchive?.addEventListener("click", doArchiveSeason);
 
-btnCloseEdit.addEventListener("click", closeEdit);
-btnSave.addEventListener("click", saveFromModal);
-btnDelete.addEventListener("click", deleteFromModal);
+// Verberg overbodige knoppen als ze nog in de HTML staan
+if (btnClearAll) btnClearAll.style.display = "none";
+if (btnArchive) btnArchive.style.display = "none";
 
-modalEdit.addEventListener("click", (e) => {
+btnCloseEdit?.addEventListener("click", closeEdit);
+btnSave?.addEventListener("click", saveFromModal);
+btnDelete?.addEventListener("click", deleteFromModal);
+
+modalEdit?.addEventListener("click", (e) => {
   if (e.target === modalEdit) closeEdit();
 });
 
-btnCloseJSON.addEventListener("click", closeJSON);
-btnCopyJSON.addEventListener("click", copyJSON);
-btnApplyJSON.addEventListener("click", applyJSON);
+btnCloseJSON?.addEventListener("click", closeJSON);
+btnCopyJSON?.addEventListener("click", copyJSON);
+btnApplyJSON?.addEventListener("click", applyJSON);
 
-modalJSON.addEventListener("click", (e) => {
+modalJSON?.addEventListener("click", (e) => {
   if (e.target === modalJSON) closeJSON();
 });
 
@@ -917,44 +766,13 @@ wireCustomSelectOnce(fClubSel, clubCustomWrap, fClub);
 wireCustomSelectOnce(fSpelSel, spelCustomWrap, fSpel);
 wireCustomSelectOnce(fTeamSel, teamCustomWrap, fTeam);
 
+// statusveld verbergen als het nog in je HTML zit
+if (fStatus?.closest(".field")) {
+  fStatus.closest(".field").style.display = "none";
+}
+
 // init
 (async () => {
-  try {
-    const arr = await loadAll();
-    DATA = normalizeList(arr);
-    _lastServerSnapshot = JSON.stringify(DATA);
-
-    setSyncStatus("ok", "● geladen");
-    bindListClicksOnce();
-    render();
-
-    await syncFromServer({ silent: true, force: true });
-
-    setInterval(() => {
-      syncFromServer({ silent: true });
-    }, POLL_MS);
-  } catch (e) {
-    console.error(e);
-
-    const cached = normalizeList(readCache());
-    DATA = cached;
-    _lastServerSnapshot = JSON.stringify(DATA);
-
-    if (DATA.length) {
-      setSyncStatus("bad", "● offline, cache actief");
-    } else {
-      setSyncStatus("bad", "● offline");
-    }
-
-    bindListClicksOnce();
-    render();
-
-    if (!DATA.length) {
-      listEl.innerHTML = `<div class="empty">Fout bij laden: ${escapeHtml(e?.message || e)}</div>`;
-    }
-
-    setInterval(() => {
-      syncFromServer({ silent: true });
-    }, POLL_MS);
-  }
+  await refreshFromSource();
+  bindListClicksOnce();
 })();
