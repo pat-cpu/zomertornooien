@@ -5,7 +5,6 @@ import {
 
 import { loadAll, saveAll, clearAll, archiveSeason } from "./store.js";
 
-
 // ============================
 // DOM refs
 // ============================
@@ -23,6 +22,8 @@ const btnExport = document.getElementById("btnExport");
 const btnImport = document.getElementById("btnImport");
 const btnReset = document.getElementById("btnReset");
 const btnClearAll = document.getElementById("btnClearAll");
+const btnDownload = document.getElementById("btnDownload");
+const btnArchive = document.getElementById("btnArchive");
 
 // Modal edit
 const modalEdit = document.getElementById("modalEdit");
@@ -30,8 +31,6 @@ const editTitle = document.getElementById("editTitle");
 const btnCloseEdit = document.getElementById("btnCloseEdit");
 const btnSave = document.getElementById("btnSave");
 const btnDelete = document.getElementById("btnDelete");
-const btnDownload = document.getElementById("btnDownload");
-const btnArchive = document.getElementById("btnArchive");
 
 const fDate = document.getElementById("fDate");
 const fTime = document.getElementById("fTime");
@@ -77,10 +76,11 @@ const toastCloseBtn = document.getElementById("toastClose");
 let DATA = [];
 let activeChip = "Komend";
 let editingId = null;
+let _lastServerSnapshot = "";
+let _listClickBound = false;
 
 const CHIP_ITEMS = ["Komend", "Ingeschreven", "Betaald", "Gespeeld", "Alles"];
 
-// Vaste lijsten
 const CLUB_CHOICES = [
   "PC Mistral", "PC Schorpioen", "PC Verbroedering", "PC Haeseveld", "PC Reinaert",
   "PC Donkmeer", "PC Alosta", "PC LOBOS"
@@ -91,14 +91,13 @@ const SPEL_CHOICES = [
   "Triplet gemengd", "Triplet Dames"
 ];
 
-// Team: basis + automatisch uit data
 const TEAM_CHOICES_BASE = ["A", "B", "C", "D"];
 
 // ============================
 // Safety guards
 // ============================
-function ensureArrayData(){
-  if(Array.isArray(DATA)) return;
+function ensureArrayData() {
+  if (Array.isArray(DATA)) return;
   console.warn("DATA was not an array. Resetting to []. DATA=", DATA);
   DATA = [];
 }
@@ -106,7 +105,7 @@ function ensureArrayData(){
 // ===========================
 // Download
 // ===========================
-function downloadBackup(){
+function downloadBackup() {
   const payload = {
     app: "pc-tornooien",
     version: 1,
@@ -119,35 +118,36 @@ function downloadBackup(){
 
   const a = document.createElement("a");
   a.href = url;
-  a.download = `pc-tornooien-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.download = `pc-tornooien-backup-${new Date().toISOString().slice(0, 10)}.json`;
   document.body.appendChild(a);
   a.click();
   a.remove();
 
-  URL.revokeObjectURL(url);
-  showToast?.({ text: "Backup gedownload." });
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+  showToast({ text: "Backup gedownload." });
 }
 
-function autoBackupAfterSave(){
-  setTimeout(() => {
-    downloadBackup();
-  }, 300);
+function autoBackupAfterSave() {
+  showToast({
+    text: 'Opgeslagen. Tik nu op "Download backup" om je backup te bewaren.'
+  });
 }
 
 // ============================
 // Normalization
 // ============================
-function stableId({date_iso, club, spel, time}){
+function stableId({ date_iso, club, spel, time }) {
   return [
-    (date_iso || "").slice(0,10),
+    (date_iso || "").slice(0, 10),
     norm(club).toLowerCase(),
     norm(spel).toLowerCase(),
     norm(time).toLowerCase()
   ].join("|");
 }
 
-function normalizeItem(x, i){
-  const date_iso = String(x?.date_iso || "").slice(0,10);
+function normalizeItem(x, i) {
+  const date_iso = String(x?.date_iso || "").slice(0, 10);
   const club = norm(x?.club);
   const spel = norm(x?.spel);
   const time = norm(x?.time);
@@ -156,7 +156,7 @@ function normalizeItem(x, i){
     ? String(x.status_code)
     : statusFromLegacyText(x?.status);
 
-  const id = String(x?.id || stableId({date_iso, club, spel, time}) || `${date_iso}|${i}`);
+  const id = String(x?.id || stableId({ date_iso, club, spel, time }) || `${date_iso}|${i}`);
 
   return {
     id,
@@ -177,13 +177,13 @@ function normalizeItem(x, i){
 // ============================
 // Dropdown helpers
 // ============================
-function buildSelectOptions(selEl, choices, selectedValue){
+function buildSelectOptions(selEl, choices, selectedValue) {
   const normalized = Array.from(new Set((choices || []).map(s => norm(s)).filter(Boolean)));
 
   const opts = [
-    { v:"", t:"(Kies…)" },
-    ...normalized.map(s => ({ v:s, t:s })),
-    { v:"__CUSTOM__", t:"(Andere…)" }
+    { v: "", t: "(Kies…)" },
+    ...normalized.map(s => ({ v: s, t: s })),
+    { v: "__CUSTOM__", t: "(Andere…)" }
   ];
 
   selEl.innerHTML = opts
@@ -191,16 +191,22 @@ function buildSelectOptions(selEl, choices, selectedValue){
     .join("");
 
   const sv = norm(selectedValue);
-  if(!sv){ selEl.value = ""; return; }
-  if(normalized.includes(sv)){ selEl.value = sv; return; }
+  if (!sv) {
+    selEl.value = "";
+    return;
+  }
+  if (normalized.includes(sv)) {
+    selEl.value = sv;
+    return;
+  }
   selEl.value = "__CUSTOM__";
 }
 
-function wireCustomSelect(selEl, wrapEl, inputEl){
-  function sync(){
+function wireCustomSelect(selEl, wrapEl, inputEl) {
+  function sync() {
     const isCustom = selEl.value === "__CUSTOM__";
     wrapEl.style.display = isCustom ? "block" : "none";
-    if(!isCustom){
+    if (!isCustom) {
       inputEl.value = selEl.value || "";
     } else {
       setTimeout(() => inputEl.focus(), 0);
@@ -210,12 +216,12 @@ function wireCustomSelect(selEl, wrapEl, inputEl){
   sync();
 }
 
-function getTeamChoicesFromData(){
+function getTeamChoicesFromData() {
   const arr = Array.isArray(DATA) ? DATA : [];
   const fromData = arr.map(x => norm(x.team)).filter(Boolean);
 
   return Array.from(new Set([...TEAM_CHOICES_BASE, ...fromData]))
-    .sort((a,b) => a.localeCompare(b, "nl"));
+    .sort((a, b) => a.localeCompare(b, "nl"));
 }
 
 // ============================
@@ -224,10 +230,10 @@ function getTeamChoicesFromData(){
 let _toastTimer = null;
 let _toastUndoFn = null;
 
-function showToast({ text, undoText = "Ongedaan maken", undoFn = null, ms = 6000 }){
-  if(!toastEl || !toastTextEl || !toastUndoBtn) return;
+function showToast({ text, undoText = "Ongedaan maken", undoFn = null, ms = 6000 }) {
+  if (!toastEl || !toastTextEl || !toastUndoBtn) return;
 
-  if(_toastTimer) clearTimeout(_toastTimer);
+  if (_toastTimer) clearTimeout(_toastTimer);
   _toastTimer = null;
   _toastUndoFn = undoFn;
 
@@ -240,34 +246,35 @@ function showToast({ text, undoText = "Ongedaan maken", undoFn = null, ms = 6000
   _toastTimer = setTimeout(() => hideToast(), ms);
 }
 
-function hideToast(){
-  if(!toastEl) return;
-  if(_toastTimer) clearTimeout(_toastTimer);
+function hideToast() {
+  if (!toastEl) return;
+  if (_toastTimer) clearTimeout(_toastTimer);
   _toastTimer = null;
   _toastUndoFn = null;
   toastEl.classList.remove("show");
 }
 
-if(toastUndoBtn){
+if (toastUndoBtn) {
   toastUndoBtn.addEventListener("click", () => {
     const fn = _toastUndoFn;
     hideToast();
-    if(fn) fn();
+    if (fn) fn();
   });
 }
-if(toastCloseBtn){
+
+if (toastCloseBtn) {
   toastCloseBtn.addEventListener("click", hideToast);
 }
 
 // ============================
 // Filtering
 // ============================
-function matchesChip(item){
+function matchesChip(item) {
   const today = todayMidnight();
   const d = new Date((item.date_iso || "") + "T00:00:00");
   const isPast = !Number.isNaN(d.getTime()) && d < today;
 
-  switch(activeChip){
+  switch (activeChip) {
     case "Alles":
       return true;
     case "Komend":
@@ -283,8 +290,8 @@ function matchesChip(item){
   }
 }
 
-function matchesQuery(item, q){
-  if(!q) return true;
+function matchesQuery(item, q) {
+  if (!q) return true;
   const hay = [
     item.date, item.club, item.spel, item.category,
     item.time, item.rounds, item.team, statusLabel(item.status_code), item.note
@@ -295,8 +302,8 @@ function matchesQuery(item, q){
 // ============================
 // Rendering
 // ============================
-function renderChips(){
-  if(!CHIP_ITEMS.includes(activeChip)) activeChip = "Komend";
+function renderChips() {
+  if (!CHIP_ITEMS.includes(activeChip)) activeChip = "Komend";
 
   chipsEl.innerHTML = CHIP_ITEMS.map(label => {
     const cls = (label === activeChip) ? "chip active" : "chip";
@@ -311,8 +318,8 @@ function renderChips(){
   });
 }
 
-function actionButtons(item){
-  if(activeChip === "Gespeeld"){
+function actionButtons(item) {
+  if (activeChip === "Gespeeld") {
     return `
       <div class="cardActions">
         <button class="btn ghost" data-act="unplay" data-id="${escapeHtml(item.id)}">↩️ Terugzetten</button>
@@ -329,9 +336,9 @@ function actionButtons(item){
   `;
 }
 
-function card(item){
+function card(item) {
   const badges = [];
-  if(item.category) badges.push(`<span class="badge">${escapeHtml(item.category)}</span>`);
+  if (item.category) badges.push(`<span class="badge">${escapeHtml(item.category)}</span>`);
   badges.push(`<span class="badge ok">${escapeHtml(statusLabel(item.status_code))}</span>`);
 
   const meta = [
@@ -339,7 +346,7 @@ function card(item){
     ["Uur", item.time || "—"],
     ["Ronden", item.rounds || "—"],
     ["Team", item.team || "—"],
-  ].map(([k,v]) => `
+  ].map(([k, v]) => `
     <div class="item">
       <div class="label">${escapeHtml(k)}</div>
       <div class="value">${escapeHtml(v)}</div>
@@ -364,7 +371,7 @@ function card(item){
   `;
 }
 
-function render(){
+function render() {
   ensureArrayData();
   renderChips();
 
@@ -398,9 +405,9 @@ function render(){
 
   const next = DATA
     .filter(x => x.status_code !== STATUS.PLAYED)
-    .map(x => ({...x, d: new Date((x.date_iso || "") + "T00:00:00")}))
+    .map(x => ({ ...x, d: new Date((x.date_iso || "") + "T00:00:00") }))
     .filter(x => !Number.isNaN(x.d.getTime()) && x.d >= today0)
-    .sort((a,b) => a.d - b.d)[0];
+    .sort((a, b) => a.d - b.d)[0];
 
   statNext.textContent = next ? next.date : "—";
 }
@@ -408,35 +415,37 @@ function render(){
 // ============================
 // API save helpers
 // ============================
-function setSyncStatus(state, text){
-  if(!syncStatusEl) return;
-  syncStatusEl.classList.remove("ok","bad");
-  if(state === "ok") syncStatusEl.classList.add("ok");
-  if(state === "bad") syncStatusEl.classList.add("bad");
+function setSyncStatus(state, text) {
+  if (!syncStatusEl) return;
+  syncStatusEl.classList.remove("ok", "bad");
+  if (state === "ok") syncStatusEl.classList.add("ok");
+  if (state === "bad") syncStatusEl.classList.add("bad");
   syncStatusEl.textContent = text;
 }
 
-async function replaceAll(next){
+async function replaceAll(next) {
   ensureArrayData();
   const arr = Array.isArray(next) ? next : [];
   await saveAll(arr);
   DATA = arr;
+  _lastServerSnapshot = JSON.stringify(DATA);
+  setSyncStatus("ok", "● lokaal bewaard");
 }
 
-async function updateItem(id, patch){
+async function updateItem(id, patch) {
   ensureArrayData();
-  const next = DATA.map(x => (String(x.id) === String(id)) ? ({...x, ...patch}) : x);
+  const next = DATA.map(x => (String(x.id) === String(id)) ? ({ ...x, ...patch }) : x);
   await replaceAll(next);
 }
 
 // ============================
 // Modal Add/Edit
 // ============================
-function openAdd(){
+function openAdd() {
   editingId = null;
   editTitle.textContent = "Tornooi toevoegen";
 
-  fDate.value = new Date().toISOString().slice(0,10);
+  fDate.value = new Date().toISOString().slice(0, 10);
   fTime.value = "";
 
   fClub.value = "";
@@ -453,18 +462,18 @@ function openAdd(){
   buildSelectOptions(fTeamSel, getTeamChoicesFromData(), "");
   wireCustomSelect(fTeamSel, teamCustomWrap, fTeam);
 
-  if(fRounds) fRounds.value = "";
-  if(fCategory) fCategory.value = "50+";
+  if (fRounds) fRounds.value = "";
+  if (fCategory) fCategory.value = "50+";
   fNote.value = "";
 
   btnDelete.style.display = "none";
   modalEdit.classList.add("show");
 }
 
-function openEdit(id){
+function openEdit(id) {
   ensureArrayData();
   const item = DATA.find(x => String(x.id) === String(id));
-  if(!item) return;
+  if (!item) return;
 
   editingId = item.id;
   editTitle.textContent = "Tornooi bewerken";
@@ -486,7 +495,7 @@ function openEdit(id){
   buildSelectOptions(fTeamSel, getTeamChoicesFromData(), fTeam.value);
   wireCustomSelect(fTeamSel, teamCustomWrap, fTeam);
 
-  if(fRounds) fRounds.value = item.rounds || "";
+  if (fRounds) fRounds.value = item.rounds || "";
 
   const cat = (item.category || "").trim();
   const normalizedCat =
@@ -496,7 +505,7 @@ function openEdit(id){
 
   const finalCat = (normalizedCat === "" || normalizedCat === "leeg") ? "50+" : normalizedCat;
 
-  if(fCategory) fCategory.value = finalCat;
+  if (fCategory) fCategory.value = finalCat;
 
   fNote.value = item.note || "";
 
@@ -504,12 +513,12 @@ function openEdit(id){
   modalEdit.classList.add("show");
 }
 
-function closeEdit(){
+function closeEdit() {
   modalEdit.classList.remove("show");
 }
 
-async function saveFromModal(){
-  if(!fDate.value){
+async function saveFromModal() {
+  if (!fDate.value) {
     alert("Datum is verplicht.");
     return;
   }
@@ -529,46 +538,45 @@ async function saveFromModal(){
 
   const item = normalizeItem(base, Date.now());
 
-  if(item.status_code === STATUS.PLAYED && !item.played_at){
+  if (item.status_code === STATUS.PLAYED && !item.played_at) {
     item.played_at = new Date().toISOString();
   }
-  if(item.status_code !== STATUS.PLAYED){
+  if (item.status_code !== STATUS.PLAYED) {
     item.played_at = "";
   }
 
   ensureArrayData();
 
   let next;
-  if(editingId){
+  if (editingId) {
     next = DATA.map(x => x.id === editingId ? item : x);
   } else {
     next = [...DATA, item];
   }
 
-  next.sort((a,b) => a.date_iso.localeCompare(b.date_iso));
+  next.sort((a, b) => a.date_iso.localeCompare(b.date_iso));
 
-  try{
+  try {
     await replaceAll(next);
     closeEdit();
     render();
-    showToast({ text: "Opgeslagen. Backup wordt gedownload." });
     autoBackupAfterSave();
-  }catch(e){
+  } catch (e) {
     alert("Opslaan mislukt: " + (e?.message || e));
   }
 }
 
-async function deleteFromModal(){
-  if(!editingId) return;
+async function deleteFromModal() {
+  if (!editingId) return;
 
   ensureArrayData();
   const idx = DATA.findIndex(x => x.id === editingId);
-  if(idx < 0) return;
+  if (idx < 0) return;
 
   const removed = DATA[idx];
   const next = DATA.filter(x => x.id !== editingId);
 
-  try{
+  try {
     await replaceAll(next);
     closeEdit();
     render();
@@ -577,32 +585,32 @@ async function deleteFromModal(){
     showToast({
       text: "Tornooi verwijderd.",
       undoFn: async () => {
-        const restored = [...DATA, removed].sort((a,b)=>a.date_iso.localeCompare(b.date_iso));
+        const restored = [...DATA, removed].sort((a, b) => a.date_iso.localeCompare(b.date_iso));
         await replaceAll(restored);
         render();
       }
     });
-  }catch(e){
+  } catch (e) {
     alert("Verwijderen mislukt: " + (e?.message || e));
   }
 }
 
-async function doArchiveSeason(){
+async function doArchiveSeason() {
   const year = prompt("Welk jaar archiveren? (bv. 2026)", "2026");
-  if(!year) return;
+  if (!year) return;
 
   const mode = confirm("Na archiveren: OK = leeg starten (2027 clean). Annuleer = reset naar base (tornooien.json).")
     ? "empty"
     : "base";
 
-  if(!confirm(`Bevestig: archiveer ${year} en reset live (${mode}).`)) return;
+  if (!confirm(`Bevestig: archiveer ${year} en reset live (${mode}).`)) return;
 
-  try{
+  try {
     const res = await archiveSeason({ year, mode });
     await syncFromServer({ silent: true });
-    showToast?.({ text: `Gearchiveerd: ${year}` });
+    showToast({ text: `Gearchiveerd: ${year}` });
     alert(`OK.\nArchief: ${res.archived_to}\nReset: ${res.reset}`);
-  }catch(e){
+  } catch (e) {
     alert("Archiveren mislukt: " + (e?.message || e));
   }
 }
@@ -612,11 +620,11 @@ async function doArchiveSeason(){
 // ============================
 let jsonMode = "export";
 
-function openJSON(mode){
+function openJSON(mode) {
   jsonMode = mode;
   modalJSON.classList.add("show");
 
-  if(mode === "export"){
+  if (mode === "export") {
     jsonTitle.textContent = "Export (alles)";
     jsonHint.textContent = "Kopieer dit als backup.";
     const payload = {
@@ -636,36 +644,36 @@ function openJSON(mode){
   jsonBox.focus();
 }
 
-function closeJSON(){
+function closeJSON() {
   modalJSON.classList.remove("show");
 }
 
-async function copyJSON(){
-  try{
+async function copyJSON() {
+  try {
     await navigator.clipboard.writeText(jsonBox.value || "");
     alert("Gekopieerd.");
-  }catch{
+  } catch {
     jsonBox.select();
     document.execCommand("copy");
     alert("Gekopieerd.");
   }
 }
 
-async function applyJSON(){
-  try{
+async function applyJSON() {
+  try {
     const payload = JSON.parse(jsonBox.value || "{}");
     const arr = Array.isArray(payload) ? payload : payload.tournaments;
-    if(!Array.isArray(arr)) throw new Error("Geen lijst gevonden");
+    if (!Array.isArray(arr)) throw new Error("Geen lijst gevonden");
 
     const cleaned = arr.map(normalizeItem).filter(x => x.date_iso);
-    cleaned.sort((a,b)=>a.date_iso.localeCompare(b.date_iso));
+    cleaned.sort((a, b) => a.date_iso.localeCompare(b.date_iso));
 
     await replaceAll(cleaned);
     closeJSON();
     render();
     autoBackupAfterSave();
-    alert("Import OK. Backup wordt ook gedownload.");
-  }catch(e){
+    alert('Import OK. Tik nu op "Download backup".');
+  } catch (e) {
     alert("Import mislukt: " + (e?.message || e));
   }
 }
@@ -673,26 +681,28 @@ async function applyJSON(){
 // ============================
 // Reset / Clear (API)
 // ============================
-async function resetToEmpty(){
-  if(!confirm("Reset = alles leegmaken. Doorgaan?")) return;
-  try{
+async function resetToEmpty() {
+  if (!confirm("Reset = alles leegmaken. Doorgaan?")) return;
+  try {
     await clearAll();
     DATA = [];
+    _lastServerSnapshot = JSON.stringify(DATA);
     render();
     showToast({ text: "Leeggemaakt." });
-  }catch(e){
+  } catch (e) {
     alert("Reset mislukt: " + (e?.message || e));
   }
 }
 
-async function clearEverything(){
-  if(prompt('Dit wist ALLES. Typ WIS om te bevestigen:') !== "WIS") return;
-  try{
+async function clearEverything() {
+  if (prompt('Dit wist ALLES. Typ WIS om te bevestigen:') !== "WIS") return;
+  try {
     await clearAll();
     DATA = [];
+    _lastServerSnapshot = JSON.stringify(DATA);
     render();
     showToast({ text: "Alles gewist." });
-  }catch(e){
+  } catch (e) {
     alert("Wissen mislukt: " + (e?.message || e));
   }
 }
@@ -700,30 +710,28 @@ async function clearEverything(){
 // ============================
 // Event delegation (list clicks)
 // ============================
-let _listClickBound = false;
-
-function bindListClicksOnce(){
-  if(_listClickBound) return;
+function bindListClicksOnce() {
+  if (_listClickBound) return;
   _listClickBound = true;
 
   listEl.addEventListener("click", async (e) => {
     const btn = e.target.closest("button[data-act]");
-    if(!btn) return;
+    if (!btn) return;
 
     const act = btn.getAttribute("data-act");
     const id = btn.getAttribute("data-id");
 
-    if(act === "edit"){
+    if (act === "edit") {
       openEdit(id);
       return;
     }
 
-    if(act === "play"){
+    if (act === "play") {
       ensureArrayData();
       const before = DATA.find(x => String(x.id) === String(id));
-      if(!before) return;
+      if (!before) return;
 
-      try{
+      try {
         await updateItem(id, { status_code: STATUS.PLAYED, played_at: new Date().toISOString() });
         render();
         autoBackupAfterSave();
@@ -731,26 +739,26 @@ function bindListClicksOnce(){
         showToast({
           text: "Verplaatst naar Gespeeld.",
           undoFn: async () => {
-            try{
+            try {
               await updateItem(id, { status_code: before.status_code, played_at: before.played_at || "" });
               render();
-            }catch(e){
+            } catch (e) {
               alert("Undo mislukt: " + (e?.message || e));
             }
           }
         });
-      }catch(e){
+      } catch (e) {
         alert("Opslaan mislukt: " + (e?.message || e));
       }
       return;
     }
 
-    if(act === "unplay"){
+    if (act === "unplay") {
       ensureArrayData();
       const before = DATA.find(x => String(x.id) === String(id));
-      if(!before) return;
+      if (!before) return;
 
-      try{
+      try {
         await updateItem(id, { status_code: STATUS.PLANNED, played_at: "" });
         render();
         autoBackupAfterSave();
@@ -758,15 +766,15 @@ function bindListClicksOnce(){
         showToast({
           text: "Teruggezet naar Komend.",
           undoFn: async () => {
-            try{
+            try {
               await updateItem(id, { status_code: before.status_code, played_at: before.played_at || "" });
               render();
-            }catch(e){
+            } catch (e) {
               alert("Undo mislukt: " + (e?.message || e));
             }
           }
         });
-      }catch(e){
+      } catch (e) {
         alert("Opslaan mislukt: " + (e?.message || e));
       }
       return;
@@ -777,27 +785,24 @@ function bindListClicksOnce(){
 // ============================
 // Init helpers
 // ============================
-let _lastServerSnapshot = "";
+async function syncFromServer({ silent = true } = {}) {
+  if (modalEdit?.classList.contains("show")) return;
 
-async function syncFromServer({ silent = true } = {}){
-  if(modalEdit?.classList.contains("show")) return;
-
-  try{
+  try {
     const arr = await loadAll();
     const next = Array.isArray(arr) ? arr.map(normalizeItem).filter(x => x.date_iso) : [];
 
     const snap = JSON.stringify(next);
-    if(snap !== _lastServerSnapshot){
+    if (snap !== _lastServerSnapshot) {
       DATA = next;
       _lastServerSnapshot = snap;
       render();
     }
 
-    const t = new Date();
-    setSyncStatus("ok", `● online • ${t.toLocaleTimeString("nl-BE", {hour:"2-digit", minute:"2-digit"})}`);
-  }catch(e){
+    setSyncStatus("ok", "● lokaal actief");
+  } catch (e) {
     setSyncStatus("bad", "● offline");
-    if(!silent) alert("Sync mislukt: " + (e?.message || e));
+    if (!silent) alert("Sync mislukt: " + (e?.message || e));
   }
 }
 
@@ -814,37 +819,36 @@ btnClearAll.addEventListener("click", clearEverything);
 btnDownload?.addEventListener("click", downloadBackup);
 btnArchive?.addEventListener("click", doArchiveSeason);
 
-// modal edit
 btnCloseEdit.addEventListener("click", closeEdit);
-btnSave.addEventListener("click", () => { saveFromModal(); });
-btnDelete.addEventListener("click", () => { deleteFromModal(); });
+btnSave.addEventListener("click", saveFromModal);
+btnDelete.addEventListener("click", deleteFromModal);
+
 modalEdit.addEventListener("click", (e) => {
-  if(e.target === modalEdit) closeEdit();
+  if (e.target === modalEdit) closeEdit();
 });
 
-// modal json
 btnCloseJSON.addEventListener("click", closeJSON);
 btnCopyJSON.addEventListener("click", copyJSON);
-btnApplyJSON.addEventListener("click", () => { applyJSON(); });
+btnApplyJSON.addEventListener("click", applyJSON);
+
 modalJSON.addEventListener("click", (e) => {
-  if(e.target === modalJSON) closeJSON();
+  if (e.target === modalJSON) closeJSON();
 });
 
 // init
 (async () => {
-  try{
+  try {
     const arr = await loadAll();
     DATA = Array.isArray(arr) ? arr.map(normalizeItem).filter(x => x.date_iso) : [];
 
     _lastServerSnapshot = JSON.stringify(DATA);
-    setSyncStatus("ok", "● online");
+    setSyncStatus("ok", "● lokaal actief");
 
     bindListClicksOnce();
     render();
 
     await syncFromServer({ silent: true });
-
-  }catch(e){
+  } catch (e) {
     console.error(e);
     DATA = [];
     _lastServerSnapshot = JSON.stringify(DATA);
@@ -855,12 +859,5 @@ modalJSON.addEventListener("click", (e) => {
   }
 })();
 
-// Auto-refresh: elke 30s + bij focus/visibility
-setInterval(() => syncFromServer({ silent: true }), 30000);
-
-window.addEventListener("focus", () => syncFromServer({ silent: true }));
-document.addEventListener("visibilitychange", () => {
-  if(document.visibilityState === "visible"){
-    syncFromServer({ silent: true });
-  }
-});
+// Auto-refresh uitgezet.
+// Render kan oude data teruggeven en zo recente wijzigingen overschrijven.
