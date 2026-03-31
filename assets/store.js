@@ -1,4 +1,6 @@
-const DATA_URL = "./data/tornooien.json";
+const API_BASE = "https://pc-tornooien-api.onrender.com";
+const API_URL = `${API_BASE}/api/tournaments`;
+const ARCHIVE_URL = `${API_BASE}/api/archive`;
 const STORAGE_KEY_CACHE = "pc_tornooien_cache_v7";
 
 function _asArray(payload) {
@@ -30,8 +32,10 @@ export function writeCache(arr) {
   }
 }
 
+
+
 export async function fetchServerAll() {
-  const r = await fetch(DATA_URL, {
+  const r = await fetch(API_URL, {
     method: "GET",
     cache: "no-store",
     headers: {
@@ -40,18 +44,19 @@ export async function fetchServerAll() {
   });
 
   if (!r.ok) {
-    throw new Error(`JSON laden mislukt (${r.status})`);
+    throw new Error(`API GET mislukt (${r.status})`);
   }
 
   const payload = await r.json();
   const arr = _asArray(payload);
 
   if (!arr) {
-    throw new Error("JSON payload is not a list");
+    throw new Error("API payload is not a list");
   }
 
   return arr;
 }
+
 
 export async function loadAll() {
   try {
