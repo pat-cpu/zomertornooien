@@ -17,7 +17,11 @@ ARCHIVE_DIR = DATA_DIR / "archive"
 
 app = Flask(__name__, static_folder=str(APP_DIR), static_url_path="")
 CORS(app)
-
+CORS(app, resources={
+    r"/api/*": {
+        "origins": ["https://pat-cpu.github.io"]
+    }
+})
 def _read_json(path: Path):
     if not path.exists():
         return []
