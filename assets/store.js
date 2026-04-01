@@ -1,6 +1,5 @@
 const API_BASE = "https://pc-tornooien-api.onrender.com";
 const API_URL = `${API_BASE}/api/tournaments`;
-const ARCHIVE_URL = `${API_BASE}/api/archive`;
 const STORAGE_KEY_CACHE = "pc_tornooien_cache_v8";
 
 function _asArray(payload) {
@@ -32,7 +31,6 @@ export function writeCache(arr) {
   }
 }
 
-// Alles ophalen van server
 export async function fetchServerAll() {
   const r = await fetch(API_URL, {
     method: "GET",
@@ -67,7 +65,6 @@ export async function loadAll() {
   }
 }
 
-// Alles opslaan op server
 export async function saveAll(arr) {
   const data = Array.isArray(arr) ? arr : [];
 
@@ -78,11 +75,12 @@ export async function saveAll(arr) {
       "Content-Type": "application/json",
       "Accept": "application/json"
     },
-    body: JSON.stringify({ tournaments: data })
+    body: JSON.stringify(data)
   });
 
   if (!r.ok) {
-    throw new Error(`API POST mislukt (${r.status})`);
+    const txt = await r.text().catch(() => "");
+    throw new Error(`API POST mislukt (${r.status}) ${txt}`);
   }
 
   writeCache(data);
@@ -97,28 +95,17 @@ export async function clearAll() {
       "Content-Type": "application/json",
       "Accept": "application/json"
     },
-    body: JSON.stringify({ tournaments: [] })
+    body: JSON.stringify([])
   });
 
   if (!r.ok) {
-    throw new Error(`API wissen mislukt (${r.status})`);
+    const txt = await r.text().catch(() => "");
+    throw new Error(`API wissen mislukt (${r.status}) ${txt}`);
   }
 
   writeCache([]);
 }
 
 export async function archiveSeason() {
-  const r = await fetch(ARCHIVE_URL, {
-    method: "POST",
-    cache: "no-store",
-    headers: {
-      "Accept": "application/json"
-    }
-  });
-
-  if (!r.ok) {
-    throw new Error(`Archiveren mislukt (${r.status})`);
-  }
-
-  return await r.json();
+  throw new Error("Archiveren is niet voorzien in deze backend.");
 }
