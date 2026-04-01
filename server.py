@@ -1,96 +1,76 @@
-from __future__ import annotations
-
-import json
-import os
-from pathlib import Path
-from flask import Flask, jsonify, request, send_from_directory
-from datetime import datetime
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
+import json
+from pathlib import Path
 
+# ============================
+# Config
+# ============================
+BASE_DIR = Path(__file__).resolve().parent
+DATA_FILE = BASE_DIR / "data" / "tornooien.json"
+APP_DIR = BASE_DIR  # voor index.html
 
-APP_DIR = Path(__file__).resolve().parent
-DATA_DIR = APP_DIR / "data"
-LIVE_FILE = DATA_DIR / "tornooien_live.json"
-BASE_FILE = DATA_DIR / "tornooien.json"
-ARCHIVE_DIR = DATA_DIR / "archive"
-
-
+# ============================
+# App
+# ============================
 app = Flask(__name__, static_folder=str(APP_DIR), static_url_path="")
-CORS(app)
-CORS(app, resources={
-    r"/api/*": {
-        "origins": ["https://pat-cpu.github.io"]
-    }
-})
-def _read_json(path: Path):
-    if not path.exists():
-        return []
-    txt = path.read_text(encoding="utf-8").strip()
-    if not txt:
-        return []
-    return json.loads(txt)
 
-def _write_json(path: Path, data):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    os.replace(tmp, path)
+# 🔥 BELANGRIJK: CORS aanzetten
+CORS(
+    app,
+    resources={r"/api/*": {"origins": "*"}},
+    supports_credentials=False
+)
 
+# ============================
+# Helpers
+# ============================
+def read_data():
+    if not DATA_FILE.exists():
+        return []
+    try:
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return []
+
+def write_data(data):
+    DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+# ============================
+# API
+# ============================
 @app.get("/api/tournaments")
-def api_get():
-    # Live file heeft voorrang; als die nog niet bestaat, start van BASE
-    if LIVE_FILE.exists():
-        data = _read_json(LIVE_FILE)
-    else:
-        data = _read_json(BASE_FILE)
-        _write_json(LIVE_FILE, data)
-    return jsonify(data)
+def get_tournaments():
+    return jsonify(read_data())
 
 @app.post("/api/tournaments")
-def api_post():
-    data = request.get_json(silent=True)
-    if not isinstance(data, list):
-        return jsonify({"ok": False, "error": "Expected a JSON array (list)"}), 400
-    _write_json(LIVE_FILE, data)
-    return jsonify({"ok": True, "count": len(data)})
+def save_tournaments():
+    try:
+        data = request.get_json(force=True)
+        if not isinstance(data, list):
+            return jsonify({"error": "Invalid data"}), 400
 
-    from datetime import datetime
+        write_data(data)
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-@app.post("/api/archive")
-def api_archive():
-    payload = request.get_json(silent=True) or {}
-    mode = payload.get("mode", "empty")  # "empty" of "base"
-    year = str(payload.get("year", "")).strip()  # optioneel
-
-    # 1) lees huidige live
-    live = _read_json(LIVE_FILE)
-
-    # 2) schrijf archief (timestamped)
-    ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-    suffix = f"-{year}" if year else ""
-    archive_path = ARCHIVE_DIR / f"tornooien{suffix}-{ts}.json"
-    _write_json(archive_path, live)
-
-    # 3) reset live
-    if mode == "base":
-        base = _read_json(BASE_FILE)
-        _write_json(LIVE_FILE, base)
-        return jsonify({"ok": True, "archived_to": str(archive_path), "reset": "base", "count": len(base)})
-    else:
-        _write_json(LIVE_FILE, [])
-        return jsonify({"ok": True, "archived_to": str(archive_path), "reset": "empty", "count": 0})
-
-
-# Frontend serve
+# ============================
+# Frontend (optioneel)
+# ============================
 @app.get("/")
 def index():
-    return send_from_directory(str(APP_DIR), "index.html")
+    return send_from_directory(APP_DIR, "index.html")
 
 @app.get("/<path:path>")
-def static_files(path: str):
-    return send_from_directory(str(APP_DIR), path)
+def static_proxy(path):
+    return send_from_directory(APP_DIR, path)
 
+# ============================
+# Run lokaal
+# ============================
 if __name__ == "__main__":
-    # luister op heel je netwerk
-    app.run(host="0.0.0.0", port=8000, debug=False)
+    app.run(debug=True)
