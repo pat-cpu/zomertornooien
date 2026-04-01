@@ -1,7 +1,7 @@
 const API_BASE = "https://pc-tornooien-api.onrender.com";
 const API_URL = `${API_BASE}/api/tournaments`;
 const ARCHIVE_URL = `${API_BASE}/api/archive`;
-const STORAGE_KEY_CACHE = "pc_tornooien_cache_v7";
+const STORAGE_KEY_CACHE = "pc_tornooien_cache_v8";
 
 function _asArray(payload) {
   if (Array.isArray(payload)) return payload;
@@ -32,18 +32,15 @@ export function writeCache(arr) {
   }
 }
 
-
-
+// Alles ophalen van server
 export async function fetchServerAll() {
   const r = await fetch(API_URL, {
-  method: "POST",
-  cache: "no-store",
-  headers: {
-    "Content-Type": "application/json",
-    "Accept": "application/json"
-  },
-  body: JSON.stringify(data)
-});
+    method: "GET",
+    cache: "no-store",
+    headers: {
+      "Accept": "application/json"
+    }
+  });
 
   if (!r.ok) {
     throw new Error(`API GET mislukt (${r.status})`);
@@ -59,7 +56,6 @@ export async function fetchServerAll() {
   return arr;
 }
 
-
 export async function loadAll() {
   try {
     const arr = await fetchServerAll();
@@ -67,21 +63,62 @@ export async function loadAll() {
     return arr;
   } catch (e) {
     console.warn("JSON laden mislukt, fallback naar cache:", e);
+    return readCache();
   }
-
-  return readCache();
 }
 
+// Alles opslaan op server
 export async function saveAll(arr) {
   const data = Array.isArray(arr) ? arr : [];
+
+  const r = await fetch(API_URL, {
+    method: "POST",
+    cache: "no-store",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json"
+    },
+    body: JSON.stringify({ tournaments: data })
+  });
+
+  if (!r.ok) {
+    throw new Error(`API POST mislukt (${r.status})`);
+  }
+
   writeCache(data);
   return true;
 }
 
 export async function clearAll() {
+  const r = await fetch(API_URL, {
+    method: "POST",
+    cache: "no-store",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json"
+    },
+    body: JSON.stringify({ tournaments: [] })
+  });
+
+  if (!r.ok) {
+    throw new Error(`API wissen mislukt (${r.status})`);
+  }
+
   writeCache([]);
 }
 
 export async function archiveSeason() {
-  throw new Error("Archiveren is uitgeschakeld op GitHub Pages.");
+  const r = await fetch(ARCHIVE_URL, {
+    method: "POST",
+    cache: "no-store",
+    headers: {
+      "Accept": "application/json"
+    }
+  });
+
+  if (!r.ok) {
+    throw new Error(`Archiveren mislukt (${r.status})`);
+  }
+
+  return await r.json();
 }
