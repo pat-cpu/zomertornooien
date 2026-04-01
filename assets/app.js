@@ -1,6 +1,6 @@
 import {
   escapeHtml, norm, toDisplayDate, todayMidnight,
-  STATUS, statusFromLegacyText
+  statusFromLegacyText
 } from "./model.js";
 
 import {
@@ -57,8 +57,8 @@ const teamCustomWrap = document.getElementById("teamCustomWrap");
 
 const fRounds = document.getElementById("fRounds");
 const fCategory = document.getElementById("fCategory");
-
 const fNote = document.getElementById("fNote");
+
 const syncStatusEl = document.getElementById("syncStatus");
 
 // Export/Import modal
@@ -82,14 +82,22 @@ const toastCloseBtn = document.getElementById("toastClose");
 let DATA = [];
 let activeChip = "Komend";
 let editingId = null;
-let _listClickBound = false;
-let _loadError = "";
+let loadError = "";
+let listClickBound = false;
 
 const CHIP_ITEMS = ["Komend", "Alles"];
 
 const CLUB_CHOICES = [
-  "PC Mistral", "PC Schorpioen", "PC Verbroedering", "PC Haeseveld", "PC Reinaert",
-  "PC Donkmeer", "PC Alosta", "PC LOBOS", "KPC Mistral", "KPC Schorpioen",
+  "PC Mistral",
+  "PC Schorpioen",
+  "PC Verbroedering",
+  "PC Haeseveld",
+  "PC Reinaert",
+  "PC Donkmeer",
+  "PC Alosta",
+  "PC LOBOS",
+  "KPC Mistral",
+  "KPC Schorpioen",
   "PC Singel, Grimbergen"
 ];
 
@@ -116,7 +124,7 @@ const SPEL_CHOICES = [
 const TEAM_CHOICES_BASE = ["A", "B", "C", "D"];
 
 // ============================
-// Safety guards
+// Helpers
 // ============================
 function ensureArrayData() {
   if (Array.isArray(DATA)) return;
@@ -137,10 +145,18 @@ function todayLocalISO() {
   return local.toISOString().slice(0, 10);
 }
 
-function setData(next, { loadError = _loadError } = {}) {
+function setData(next, { error = loadError } = {}) {
   DATA = normalizeList(next);
-  _loadError = loadError;
+  loadError = error;
   render();
+}
+
+function setSyncStatus(state, text) {
+  if (!syncStatusEl) return;
+  syncStatusEl.classList.remove("ok", "bad");
+  if (state === "ok") syncStatusEl.classList.add("ok");
+  if (state === "bad") syncStatusEl.classList.add("bad");
+  syncStatusEl.textContent = text;
 }
 
 // ===========================
@@ -154,7 +170,9 @@ function downloadBackup() {
     tournaments: DATA
   };
 
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json"
+  });
   const url = URL.createObjectURL(blob);
 
   const a = document.createElement("a");
@@ -165,13 +183,12 @@ function downloadBackup() {
   a.remove();
 
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-
   showToast({ text: "Backup gedownload." });
 }
 
 function autoBackupAfterSave() {
   showToast({
-    text: 'Lokaal opgeslagen. Tik nu op "Download backup" om je backup te bewaren.'
+    text: 'Opgeslagen op server. Tik op "Download backup" om een reservekopie te bewaren.'
   });
 }
 
@@ -233,7 +250,9 @@ function normalizeList(arr) {
 // Dropdown helpers
 // ============================
 function buildSelectOptions(selEl, choices, selectedValue) {
-  const normalized = Array.from(new Set((choices || []).map(s => norm(s)).filter(Boolean)));
+  const normalized = Array.from(
+    new Set((choices || []).map(s => norm(s)).filter(Boolean))
+  );
 
   const opts = [
     { v: "", t: "(Kies…)" },
@@ -279,61 +298,67 @@ function wireCustomSelectOnce(selEl, wrapEl, inputEl) {
 }
 
 function getTeamChoicesFromData() {
-  const arr = Array.isArray(DATA) ? DATA : [];
-  const fromData = arr.map(x => norm(x.team)).filter(Boolean);
+  const fromData = (Array.isArray(DATA) ? DATA : [])
+    .map(x => norm(x.team))
+    .filter(Boolean);
 
   return Array.from(new Set([...TEAM_CHOICES_BASE, ...fromData]))
     .sort((a, b) => a.localeCompare(b, "nl"));
 }
 
+function refreshModalSelects() {
+  buildSelectOptions(fClubSel, CLUB_CHOICES, fClub.value);
+  fClubSel?._syncCustom?.();
+
+  buildSelectOptions(fSpelSel, SPEL_CHOICES, fSpel.value);
+  fSpelSel?._syncCustom?.();
+
+  buildSelectOptions(fTeamSel, getTeamChoicesFromData(), fTeam.value);
+  fTeamSel?._syncCustom?.();
+}
+
 // ============================
-// Toast (Undo)
+// Toast
 // ============================
-let _toastTimer = null;
-let _toastUndoFn = null;
+let toastTimer = null;
+let toastUndoFn = null;
 
 function showToast({ text, undoText = "Ongedaan maken", undoFn = null, ms = 6000 }) {
   if (!toastEl || !toastTextEl || !toastUndoBtn) return;
 
-  if (_toastTimer) clearTimeout(_toastTimer);
-  _toastTimer = null;
-  _toastUndoFn = undoFn;
+  if (toastTimer) clearTimeout(toastTimer);
+  toastUndoFn = undoFn;
 
   toastTextEl.textContent = text || "";
   toastUndoBtn.textContent = undoText;
   toastUndoBtn.style.display = undoFn ? "inline-block" : "none";
 
   toastEl.classList.add("show");
-
-  _toastTimer = setTimeout(() => hideToast(), ms);
+  toastTimer = setTimeout(hideToast, ms);
 }
 
 function hideToast() {
   if (!toastEl) return;
-  if (_toastTimer) clearTimeout(_toastTimer);
-  _toastTimer = null;
-  _toastUndoFn = null;
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = null;
+  toastUndoFn = null;
   toastEl.classList.remove("show");
 }
 
-if (toastUndoBtn) {
-  toastUndoBtn.addEventListener("click", () => {
-    const fn = _toastUndoFn;
-    hideToast();
-    if (fn) fn();
-  });
-}
+toastUndoBtn?.addEventListener("click", () => {
+  const fn = toastUndoFn;
+  hideToast();
+  if (fn) fn();
+});
 
-if (toastCloseBtn) {
-  toastCloseBtn.addEventListener("click", hideToast);
-}
+toastCloseBtn?.addEventListener("click", hideToast);
 
 // ============================
 // Filtering
 // ============================
 function matchesChip(item) {
   const today = todayMidnight();
-  const d = new Date((item.date_iso || "") + "T00:00:00");
+  const d = new Date(`${item.date_iso || ""}T00:00:00`);
   const isPast = !Number.isNaN(d.getTime()) && d < today;
 
   switch (activeChip) {
@@ -347,10 +372,18 @@ function matchesChip(item) {
 
 function matchesQuery(item, q) {
   if (!q) return true;
+
   const hay = [
-    item.date, item.club, item.spel, item.category,
-    item.time, item.rounds, item.team, item.note
+    item.date,
+    item.club,
+    item.spel,
+    item.category,
+    item.time,
+    item.rounds,
+    item.team,
+    item.note
   ].join(" ").toLowerCase();
+
   return hay.includes(q.toLowerCase());
 }
 
@@ -361,7 +394,7 @@ function renderChips() {
   if (!CHIP_ITEMS.includes(activeChip)) activeChip = "Komend";
 
   chipsEl.innerHTML = CHIP_ITEMS.map(label => {
-    const cls = (label === activeChip) ? "chip active" : "chip";
+    const cls = label === activeChip ? "chip active" : "chip";
     return `<button class="${cls}" data-chip="${escapeHtml(label)}">${escapeHtml(label)}</button>`;
   }).join("");
 
@@ -383,7 +416,9 @@ function actionButtons(item) {
 
 function card(item) {
   const badges = [];
-  if (item.category) badges.push(`<span class="badge">${escapeHtml(item.category)}</span>`);
+  if (item.category) {
+    badges.push(`<span class="badge">${escapeHtml(item.category)}</span>`);
+  }
 
   const meta = [
     ["Spelvorm", item.spel || "—"],
@@ -419,12 +454,12 @@ function render() {
   ensureArrayData();
   renderChips();
 
-  const q = (qEl.value || "").trim();
+  const q = (qEl?.value || "").trim();
   const filtered = DATA.filter(matchesChip).filter(x => matchesQuery(x, q));
 
   if (!filtered.length) {
-    if (_loadError && !DATA.length) {
-      listEl.innerHTML = `<div class="empty">Fout bij laden: ${escapeHtml(_loadError)}</div>`;
+    if (loadError && !DATA.length) {
+      listEl.innerHTML = `<div class="empty">Fout bij laden: ${escapeHtml(loadError)}</div>`;
     } else {
       listEl.innerHTML = `<div class="empty">Geen resultaten.</div>`;
     }
@@ -435,50 +470,41 @@ function render() {
   const today0 = todayMidnight();
 
   const upcoming = DATA.filter(x => {
-    const d = new Date((x.date_iso || "") + "T00:00:00");
+    const d = new Date(`${x.date_iso || ""}T00:00:00`);
     return !Number.isNaN(d.getTime()) && d >= today0;
   });
 
   statTotal.textContent = upcoming.length;
   statVisible.textContent = filtered.length;
-
   if (statIn) statIn.textContent = "—";
 
   const next = upcoming
-    .map(x => ({ ...x, d: new Date((x.date_iso || "") + "T00:00:00") }))
+    .map(x => ({ ...x, d: new Date(`${x.date_iso || ""}T00:00:00`) }))
     .sort((a, b) => a.d - b.d)[0];
 
   statNext.textContent = next ? next.date : "—";
 }
 
 // ============================
-// Save helpers
+// Data loading / saving
 // ============================
-function setSyncStatus(state, text) {
-  if (!syncStatusEl) return;
-  syncStatusEl.classList.remove("ok", "bad");
-  if (state === "ok") syncStatusEl.classList.add("ok");
-  if (state === "bad") syncStatusEl.classList.add("bad");
-  syncStatusEl.textContent = text;
-}
-
 async function replaceAll(next) {
   const arr = normalizeList(next);
   await saveAll(arr);
-  setData(arr, { loadError: "" });
+  setData(arr, { error: "" });
   writeCache(arr);
-  setSyncStatus("ok", "● lokaal bewaard");
+  setSyncStatus("ok", "● server bewaard");
 }
 
 async function refreshFromSource() {
   try {
     const arr = await loadAll();
-    setData(arr, { loadError: "" });
-    writeCache(DATA);
-    setSyncStatus("ok", "● geladen");
+    setData(arr, { error: "" });
+    writeCache(arr);
+    setSyncStatus("ok", "● server gesynchroniseerd");
   } catch (e) {
     const cached = normalizeList(readCache());
-    setData(cached, { loadError: e?.message || String(e) });
+    setData(cached, { error: e?.message || String(e) });
 
     if (cached.length) {
       setSyncStatus("bad", "● offline, cache actief");
@@ -491,29 +517,15 @@ async function refreshFromSource() {
 // ============================
 // Modal Add/Edit
 // ============================
-function refreshModalSelects() {
-  buildSelectOptions(fClubSel, CLUB_CHOICES, fClub.value);
-  fClubSel._syncCustom?.();
-
-  buildSelectOptions(fSpelSel, SPEL_CHOICES, fSpel.value);
-  fSpelSel._syncCustom?.();
-
-  buildSelectOptions(fTeamSel, getTeamChoicesFromData(), fTeam.value);
-  fTeamSel._syncCustom?.();
-}
-
 function openAdd() {
   editingId = null;
   editTitle.textContent = "Tornooi toevoegen";
 
   fDate.value = todayLocalISO();
   fTime.value = "";
-
   fClub.value = "";
   fSpel.value = "";
-  if (fStatus) fStatus.value = STATUS.PLANNED;
   fTeam.value = "";
-
   if (fRounds) fRounds.value = "";
   if (fCategory) fCategory.value = "50+";
   fNote.value = "";
@@ -521,7 +533,7 @@ function openAdd() {
   refreshModalSelects();
 
   if (btnDelete) btnDelete.style.display = "none";
-  if (modalEdit) modalEdit.classList.add("show");
+  modalEdit?.classList.add("show");
 }
 
 function openEdit(id) {
@@ -534,34 +546,34 @@ function openEdit(id) {
 
   fDate.value = item.date_iso || "";
   fTime.value = item.time || "";
-
   fClub.value = item.club || "";
   fSpel.value = item.spel || "";
-  if (fStatus) fStatus.value = item.status_code || STATUS.PLANNED;
   fTeam.value = item.team || "";
-
   if (fRounds) fRounds.value = item.rounds || "";
 
   const cat = (item.category || "").trim();
   const normalizedCat =
-    (cat === "AC" || cat.toLowerCase() === "all categorieen" || cat.toLowerCase() === "alle categorieen")
+    cat === "AC" ||
+    cat.toLowerCase() === "all categorieen" ||
+    cat.toLowerCase() === "alle categorieen"
       ? "AllCat"
       : cat;
 
-  const finalCat = (normalizedCat === "" || normalizedCat === "leeg") ? "50+" : normalizedCat;
+  const finalCat = normalizedCat === "" || normalizedCat === "leeg"
+    ? "50+"
+    : normalizedCat;
 
   if (fCategory) fCategory.value = finalCat;
-
   fNote.value = item.note || "";
 
   refreshModalSelects();
 
   if (btnDelete) btnDelete.style.display = "inline-block";
-  if (modalEdit) modalEdit.classList.add("show");
+  modalEdit?.classList.add("show");
 }
 
 function closeEdit() {
-  if (modalEdit) modalEdit.classList.remove("show");
+  modalEdit?.classList.remove("show");
 }
 
 async function saveFromModal() {
@@ -576,9 +588,9 @@ async function saveFromModal() {
     time: fTime.value,
     club: fClub.value,
     spel: fSpel.value,
-    category: (fCategory && fCategory.value === "AC") ? "AllCat" : (fCategory ? fCategory.value : ""),
-    rounds: fRounds ? fRounds.value : "",
-    status_code: fStatus ? fStatus.value : STATUS.PLANNED,
+    category: fCategory?.value === "AC" ? "AllCat" : (fCategory?.value || ""),
+    rounds: fRounds?.value || "",
+    status_code: "",
     team: fTeam.value,
     note: fNote.value
   };
@@ -587,12 +599,9 @@ async function saveFromModal() {
 
   ensureArrayData();
 
-  let next;
-  if (editingId) {
-    next = DATA.map(x => x.id === editingId ? item : x);
-  } else {
-    next = [...DATA, item];
-  }
+  const next = editingId
+    ? DATA.map(x => x.id === editingId ? item : x)
+    : [...DATA, item];
 
   try {
     await replaceAll(next);
@@ -631,12 +640,9 @@ async function deleteFromModal() {
 }
 
 // ============================
-// Export / Import (via modal)
+// Export / Import
 // ============================
-let jsonMode = "export";
-
 function openJSON(mode) {
-  jsonMode = mode;
   if (!modalJSON) return;
 
   modalJSON.classList.add("show");
@@ -644,13 +650,12 @@ function openJSON(mode) {
   if (mode === "export") {
     jsonTitle.textContent = "Export (alles)";
     jsonHint.textContent = "Kopieer dit als backup.";
-    const payload = {
+    jsonBox.value = JSON.stringify({
       app: "pc-tornooien",
       version: 1,
       exported_at: new Date().toISOString(),
       tournaments: DATA
-    };
-    jsonBox.value = JSON.stringify(payload, null, 2);
+    }, null, 2);
     btnApplyJSON.style.display = "none";
   } else {
     jsonTitle.textContent = "Import (alles)";
@@ -658,11 +663,12 @@ function openJSON(mode) {
     jsonBox.value = "";
     btnApplyJSON.style.display = "inline-block";
   }
+
   jsonBox.focus();
 }
 
 function closeJSON() {
-  if (modalJSON) modalJSON.classList.remove("show");
+  modalJSON?.classList.remove("show");
 }
 
 async function copyJSON() {
@@ -682,9 +688,7 @@ async function applyJSON() {
     const arr = Array.isArray(payload) ? payload : payload.tournaments;
     if (!Array.isArray(arr)) throw new Error("Geen lijst gevonden");
 
-    const cleaned = normalizeList(arr);
-
-    await replaceAll(cleaned);
+    await replaceAll(normalizeList(arr));
     closeJSON();
     autoBackupAfterSave();
     alert('Import OK. Tik nu op "Download backup".');
@@ -701,9 +705,9 @@ async function clearEverything() {
 
   try {
     await clearAll();
-    setData([], { loadError: "" });
-    writeCache(DATA);
-    setSyncStatus("ok", "● lokaal leeggemaakt");
+    setData([], { error: "" });
+    writeCache([]);
+    setSyncStatus("ok", "● server leeggemaakt");
     showToast({ text: "Alles gewist." });
   } catch (e) {
     alert("Wissen mislukt: " + (e?.message || e));
@@ -711,13 +715,13 @@ async function clearEverything() {
 }
 
 // ============================
-// Event delegation (list clicks)
+// Event delegation
 // ============================
 function bindListClicksOnce() {
-  if (_listClickBound) return;
-  _listClickBound = true;
+  if (listClickBound) return;
+  listClickBound = true;
 
-  listEl.addEventListener("click", async (e) => {
+  listEl.addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-act]");
     if (!btn) return;
 
@@ -741,10 +745,6 @@ btnImport?.addEventListener("click", () => openJSON("import"));
 btnReset?.addEventListener("click", clearEverything);
 btnDownload?.addEventListener("click", downloadBackup);
 
-// Verberg overbodige knoppen als ze nog in de HTML staan
-if (btnClearAll) btnClearAll.style.display = "none";
-if (btnArchive) btnArchive.style.display = "none";
-
 btnCloseEdit?.addEventListener("click", closeEdit);
 btnSave?.addEventListener("click", saveFromModal);
 btnDelete?.addEventListener("click", deleteFromModal);
@@ -761,12 +761,13 @@ modalJSON?.addEventListener("click", (e) => {
   if (e.target === modalJSON) closeJSON();
 });
 
-// Custom selects: één keer binden
 wireCustomSelectOnce(fClubSel, clubCustomWrap, fClub);
 wireCustomSelectOnce(fSpelSel, spelCustomWrap, fSpel);
 wireCustomSelectOnce(fTeamSel, teamCustomWrap, fTeam);
 
-// statusveld verbergen als het nog in je HTML zit
+// Overbodige HTML-elementen voorlopig verbergen
+if (btnClearAll) btnClearAll.style.display = "none";
+if (btnArchive) btnArchive.style.display = "none";
 if (fStatus?.closest(".field")) {
   fStatus.closest(".field").style.display = "none";
 }

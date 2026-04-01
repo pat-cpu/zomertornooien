@@ -36,12 +36,14 @@ export function writeCache(arr) {
 
 export async function fetchServerAll() {
   const r = await fetch(API_URL, {
-    method: "GET",
-    cache: "no-store",
-    headers: {
-      "Accept": "application/json"
-    }
-  });
+  method: "POST",
+  cache: "no-store",
+  headers: {
+    "Content-Type": "application/json",
+    "Accept": "application/json"
+  },
+  body: JSON.stringify(data)
+});
 
   if (!r.ok) {
     throw new Error(`API GET mislukt (${r.status})`);
