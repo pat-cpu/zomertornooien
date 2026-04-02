@@ -1,4 +1,17 @@
+console.log("APP LIVE 20260402d");
 
+import {
+  escapeHtml, norm, toDisplayDate, todayMidnight,
+  statusFromLegacyText
+} from "./model.js?v=20260402d";
+
+import {
+  loadAll,
+  saveAll,
+  clearAll,
+  readCache,
+  writeCache
+} from "./store.js?v=20260402d";
 import {
   escapeHtml, norm, toDisplayDate, todayMidnight,
   statusFromLegacyText
