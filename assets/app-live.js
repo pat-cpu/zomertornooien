@@ -1,4 +1,4 @@
-console.log("APP LIVE 20260402d");
+console.log("APP LIVE 20260402e");
 
 import {
   escapeHtml, norm, toDisplayDate, todayMidnight,
