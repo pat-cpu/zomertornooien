@@ -36,7 +36,7 @@ export async function fetchServerAll() {
     method: "GET",
     cache: "no-store",
     headers: {
-      "Accept": "application/json"
+      Accept: "application/json"
     }
   });
 
@@ -73,7 +73,7 @@ export async function saveAll(arr) {
     cache: "no-store",
     headers: {
       "Content-Type": "application/json",
-      "Accept": "application/json"
+      Accept: "application/json"
     },
     body: JSON.stringify(data)
   });
@@ -93,7 +93,7 @@ export async function clearAll() {
     cache: "no-store",
     headers: {
       "Content-Type": "application/json",
-      "Accept": "application/json"
+      Accept: "application/json"
     },
     body: JSON.stringify([])
   });
