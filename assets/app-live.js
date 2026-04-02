@@ -2,8 +2,8 @@ console.log("APP LIVE 20260402e");
 
 import {
   escapeHtml as esc, norm, toDisplayDate, todayMidnight,
-  statusFromLegacyText
-} from "./model.js?v=20260402e";
+  statusFromLegacyText, STATUS, statusLabel
+} from "./model.js";
 
 import {
   loadAll,
@@ -360,31 +360,35 @@ toastCloseBtn?.addEventListener("click", hideToast);
 // ============================
 // Filtering
 // ============================
-function matchesChip(item){
-  if(activeChip === "Alles") return true;
+function matchesFilter(item, filterName) {
+  if (filterName === "Alles") return true;
 
   const today = todayMidnight();
-  const d = new Date((item.date_iso || "") + "T00:00:00");
-  const isPast = !Number.isNaN(d.getTime()) && d < today;
+  const d = new Date(`${item.date_iso || ""}T00:00:00`);
+  const hasValidDate = !Number.isNaN(d.getTime());
+  const isPast = hasValidDate && d < today;
+  const statusCode = item.status_code || STATUS.PLANNED;
 
-  const status = item.status_code || item.status || "";
-
-  switch(activeChip){
+  switch (filterName) {
     case "Komend":
-      return !isPast;
+      return hasValidDate && !isPast && statusCode !== STATUS.PLAYED;
 
     case "Ingeschreven":
-      return status.toLowerCase().includes("ingeschreven");
+      return statusCode === STATUS.REGISTERED;
 
     case "Betaald":
-      return status.toLowerCase().includes("betaald");
+      return statusCode === STATUS.PAID;
 
     case "Gespeeld":
-      return isPast;
+      return isPast || statusCode === STATUS.PLAYED;
 
     default:
       return true;
   }
+}
+
+function matchesChip(item) {
+  return matchesFilter(item, activeChip);
 }
 
 function matchesQuery(item, q) {
