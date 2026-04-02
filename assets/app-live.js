@@ -1,9 +1,14 @@
 console.log("APP LIVE 20260402e");
 
 import {
-  escapeHtml as esc, norm, toDisplayDate, todayMidnight,
-  statusFromLegacyText, STATUS, statusLabel
-} from "./model.js";
+  escapeHtml as esc,
+  norm,
+  toDisplayDate,
+  todayMidnight,
+  statusFromLegacyText,
+  STATUS,
+  statusLabel
+} from "./model.js?v=20260402e";
 
 import {
   loadAll,
@@ -437,8 +442,19 @@ function actionButtons(item) {
 
 function card(item) {
   const badges = [];
+
+  // Status badge (BELANGRIJK)
+  if (item.status_code) {
+    badges.push(
+      `<span class="badge badge-status">${esc(statusLabel(item.status_code))}</span>`
+    );
+  }
+
+  // Eventuele categorie badge
   if (item.category) {
-    badges.push(`<span class="badge">${esc(item.category)}</span>`);
+    badges.push(
+      `<span class="badge">${esc(item.category)}</span>`
+    );
   }
 
   const meta = [
