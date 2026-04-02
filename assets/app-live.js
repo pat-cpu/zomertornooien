@@ -88,8 +88,8 @@ const toastCloseBtn = document.getElementById("toastClose");
 // App state
 // ============================
 let DATA = [];
-//let activeChip = "Komend";
-let activeChip = "Alles";
+let activeChip = "Komend";
+//let activeChip = "Alles";
 let editingId = null;
 let loadError = "";
 let listClickBound = false;
