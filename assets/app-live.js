@@ -83,7 +83,8 @@ const toastCloseBtn = document.getElementById("toastClose");
 // App state
 // ============================
 let DATA = [];
-let activeChip = "Komend";
+//let activeChip = "Komend";
+let activeChip = "Alles";
 let editingId = null;
 let loadError = "";
 let listClickBound = false;
@@ -359,15 +360,28 @@ toastCloseBtn?.addEventListener("click", hideToast);
 // ============================
 // Filtering
 // ============================
-function matchesChip(item) {
+function matchesChip(item){
+  if(activeChip === "Alles") return true;
+
   const today = todayMidnight();
-  const d = new Date(`${item.date_iso || ""}T00:00:00`);
+  const d = new Date((item.date_iso || "") + "T00:00:00");
   const isPast = !Number.isNaN(d.getTime()) && d < today;
 
-  switch (activeChip) {
+  const status = item.status_code || item.status || "";
+
+  switch(activeChip){
     case "Komend":
       return !isPast;
-    case "Alles":
+
+    case "Ingeschreven":
+      return status.toLowerCase().includes("ingeschreven");
+
+    case "Betaald":
+      return status.toLowerCase().includes("betaald");
+
+    case "Gespeeld":
+      return isPast;
+
     default:
       return true;
   }
