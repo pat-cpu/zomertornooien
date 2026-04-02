@@ -101,6 +101,7 @@ export async function clearAll() {
   if (!r.ok) {
     const txt = await r.text().catch(() => "");
     throw new Error(`API wissen mislukt (${r.status}) ${txt}`);
+    
   }
 
   writeCache([]);
