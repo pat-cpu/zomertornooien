@@ -1,3 +1,4 @@
+console.log("APP VERSION TEST 2026-04-02-A");
 import {
   escapeHtml, norm, toDisplayDate, todayMidnight,
   statusFromLegacyText

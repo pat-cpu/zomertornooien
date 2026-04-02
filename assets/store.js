@@ -1,3 +1,4 @@
+console.log("STORE VERSION TEST 2026-04-02-A");
 const API_BASE = "https://pc-tornooien-api.onrender.com";
 const API_URL = `${API_BASE}/api/tournaments`;
 const STORAGE_KEY_CACHE = "pc_tornooien_cache_v8";
@@ -101,7 +102,7 @@ export async function clearAll() {
   if (!r.ok) {
     const txt = await r.text().catch(() => "");
     throw new Error(`API wissen mislukt (${r.status}) ${txt}`);
-    
+
   }
 
   writeCache([]);
