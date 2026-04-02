@@ -559,7 +559,7 @@ function openAdd() {
   editTitle.textContent = "Tornooi toevoegen";
 
   fDate.value = todayLocalISO();
-  fStatus.value = "";
+  fStatus.value = "planned";
   fTime.value = "";
   fClub.value = "";
   fSpel.value = "";
