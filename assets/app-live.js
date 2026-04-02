@@ -3,7 +3,7 @@ console.log("APP LIVE 20260402e");
 import {
   escapeHtml, norm, toDisplayDate, todayMidnight,
   statusFromLegacyText
-} from "./model.js?v=20260402d";
+} from "./model.js?v=20260402e";
 
 import {
   loadAll,
@@ -11,19 +11,8 @@ import {
   clearAll,
   readCache,
   writeCache
-} from "./store.js?v=20260402d";
-import {
-  escapeHtml, norm, toDisplayDate, todayMidnight,
-  statusFromLegacyText
-} from "./model.js?v=20260402d";
+} from "./store.js?v=20260402e";
 
-import {
-  loadAll,
-  saveAll,
-  clearAll,
-  readCache,
-  writeCache
-} from "./store.js?v=20260402d";
 
 // ============================
 // DOM refs
