@@ -1,7 +1,7 @@
 console.log("APP LIVE 20260402e");
 
 import {
-  escapeHtml, norm, toDisplayDate, todayMidnight,
+  escapeHtml as esc, norm, toDisplayDate, todayMidnight,
   statusFromLegacyText
 } from "./model.js?v=20260402e";
 
@@ -264,7 +264,7 @@ function buildSelectOptions(selEl, choices, selectedValue) {
   ];
 
   selEl.innerHTML = opts
-    .map(o => `<option value="${escapeHtml(o.v)}">${escapeHtml(o.t)}</option>`)
+    .map(o => `<option value="${esc(o.v)}">${esc(o.t)}</option>`)
     .join("");
 
   const sv = norm(selectedValue);
@@ -398,7 +398,7 @@ function renderChips() {
 
   chipsEl.innerHTML = CHIP_ITEMS.map(label => {
     const cls = label === activeChip ? "chip active" : "chip";
-    return `<button class="${cls}" data-chip="${escapeHtml(label)}">${escapeHtml(label)}</button>`;
+    return `<button class="${cls}" data-chip="${esc(label)}">${esc(label)}</button>`;
   }).join("");
 
   chipsEl.querySelectorAll("button").forEach(btn => {
@@ -412,7 +412,7 @@ function renderChips() {
 function actionButtons(item) {
   return `
     <div class="cardActions">
-      <button class="btn ghost" data-act="edit" data-id="${escapeHtml(item.id)}">✏️ Bewerken</button>
+      <button class="btn ghost" data-act="edit" data-id="${esc(item.id)}">✏️ Bewerken</button>
     </div>
   `;
 }
@@ -420,7 +420,7 @@ function actionButtons(item) {
 function card(item) {
   const badges = [];
   if (item.category) {
-    badges.push(`<span class="badge">${escapeHtml(item.category)}</span>`);
+    badges.push(`<span class="badge">${esc(item.category)}</span>`);
   }
 
   const meta = [
@@ -430,19 +430,19 @@ function card(item) {
     ["Team", item.team || "—"],
   ].map(([k, v]) => `
     <div class="item">
-      <div class="label">${escapeHtml(k)}</div>
-      <div class="value">${escapeHtml(v)}</div>
+      <div class="label">${esc(k)}</div>
+      <div class="value">${esc(v)}</div>
     </div>
   `).join("");
 
-  const note = item.note ? `<div class="note">${escapeHtml(item.note)}</div>` : "";
+  const note = item.note ? `<div class="note">${esc(item.note)}</div>` : "";
 
   return `
     <article class="card">
       <div class="row">
         <div>
-          <div class="date">${escapeHtml(item.date)}</div>
-          <div class="club">${escapeHtml(item.club || "—")}</div>
+          <div class="date">${esc(item.date)}</div>
+          <div class="club">${esc(item.club || "—")}</div>
         </div>
         <div class="badges">${badges.join("")}</div>
       </div>
@@ -462,7 +462,7 @@ function render() {
 
   if (!filtered.length) {
     if (loadError && !DATA.length) {
-      listEl.innerHTML = `<div class="empty">Fout bij laden: ${escapeHtml(loadError)}</div>`;
+      listEl.innerHTML = `<div class="empty">Fout bij laden: ${esc(loadError)}</div>`;
     } else {
       listEl.innerHTML = `<div class="empty">Geen resultaten.</div>`;
     }
