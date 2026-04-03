@@ -628,7 +628,7 @@ async function saveFromModal() {
     spel: fSpel.value,
     category: fCategory?.value === "AC" ? "AllCat" : (fCategory?.value || ""),
     rounds: fRounds?.value || "",
-    status_code: "",
+    status_code: fStatus.value || "planned",
     team: fTeam.value,
     note: fNote.value
   };
