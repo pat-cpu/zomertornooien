@@ -1,4 +1,5 @@
-console.log("STORE VERSION TEST 2026-04-02-A");
+console.log("STORE VERSION LIVE 2026-04-03-C");
+
 const API_BASE = "https://pc-tornooien-api.onrender.com";
 const API_URL = `${API_BASE}/api/tournaments`;
 const STORAGE_KEY_CACHE = "pc_tornooien_cache_v8";
@@ -49,7 +50,7 @@ export async function fetchServerAll() {
   const arr = _asArray(payload);
 
   if (!arr) {
-    throw new Error("API payload is not a list");
+    throw new Error("API payload is geen lijst");
   }
 
   return arr;
@@ -61,7 +62,7 @@ export async function loadAll() {
     writeCache(arr);
     return arr;
   } catch (e) {
-    console.warn("JSON laden mislukt, fallback naar cache:", e);
+    console.warn("Server laden mislukt, fallback naar cache:", e);
     return readCache();
   }
 }
@@ -102,10 +103,10 @@ export async function clearAll() {
   if (!r.ok) {
     const txt = await r.text().catch(() => "");
     throw new Error(`API wissen mislukt (${r.status}) ${txt}`);
-
   }
 
   writeCache([]);
+  return true;
 }
 
 export async function archiveSeason() {
