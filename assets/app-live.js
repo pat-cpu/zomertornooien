@@ -583,6 +583,7 @@ function openEdit(id) {
   editTitle.textContent = "Tornooi bewerken";
 
   fDate.value = item.date_iso || "";
+  fStatus.value = item.status_code || "planned";
   fTime.value = item.time || "";
   fClub.value = item.club || "";
   fSpel.value = item.spel || "";
