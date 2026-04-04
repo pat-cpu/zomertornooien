@@ -66,6 +66,7 @@ export async function loadAll() {
   }
 }
 
+
 export async function saveAll(arr) {
   const data = Array.isArray(arr) ? arr : [];
   writeCache(data);
