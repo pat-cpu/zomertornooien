@@ -140,12 +140,12 @@
     "note": ""
   },
   {
-    "id": "30146b67-3109-43e0-9de3-07dbb78a921a",
+    "id": "500679a6-3d31-4f2e-b907-b8c731bad20d",
     "date_iso": "2026-04-04",
     "date": "za 4 apr 2026",
-    "club": "",
-    "spel": "Test 09:04",
-    "time": "09:05",
+    "club": "Test Save",
+    "spel": "",
+    "time": "09:09",
     "category": "50+",
     "rounds": "",
     "team": "",
@@ -154,12 +154,12 @@
     "note": ""
   },
   {
-    "id": "450cfbbb-1016-4aee-a3c7-0717d3ae1972",
+    "id": "a2597c6b-1cdb-43fd-88e6-f33229cafd58",
     "date_iso": "2026-04-04",
     "date": "za 4 apr 2026",
-    "club": "PC Mistral",
-    "spel": "Test 09:04",
-    "time": "09:04",
+    "club": "TEST_2",
+    "spel": "",
+    "time": "09:13",
     "category": "50+",
     "rounds": "",
     "team": "",
