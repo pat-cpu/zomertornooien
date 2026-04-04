@@ -57,11 +57,6 @@ export async function fetchServerAll() {
 
 export async function loadAll() {
   try {
-    const cached = readCache();
-    if (Array.isArray(cached) && cached.length > 0) {
-      return cached;
-    }
-
     const arr = await fetchServerAll();
     writeCache(arr);
     return arr;
