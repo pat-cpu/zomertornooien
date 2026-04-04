@@ -1,7 +1,6 @@
 console.log("STORE VERSION LIVE 2026-04-03-C");
 
-const API_BASE = "https://pc-tornooien-api.onrender.com";
-const API_URL = `${API_BASE}/api/tournaments`;
+const API_URL = "/api/tournaments";
 const STORAGE_KEY_CACHE = "pc_tornooien_cache_v8";
 
 function _asArray(payload) {
