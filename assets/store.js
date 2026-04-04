@@ -1,6 +1,6 @@
-console.log("STORE VERSION LIVE 2026-04-03-C");
+console.log("STORE VERSION STATIC 2026-04-04-A");
 
-const API_URL = "/api/tournaments";
+const DATA_URL = "./data/tornooien.json";
 const STORAGE_KEY_CACHE = "pc_tornooien_cache_v8";
 
 function _asArray(payload) {
@@ -12,7 +12,7 @@ function _asArray(payload) {
 export function getCacheKey() {
   return STORAGE_KEY_CACHE;
 }
-GainNode
+
 export function readCache() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_CACHE);
@@ -33,7 +33,7 @@ export function writeCache(arr) {
 }
 
 export async function fetchServerAll() {
-  const r = await fetch(API_URL, {
+  const r = await fetch(DATA_URL, {
     method: "GET",
     cache: "no-store",
     headers: {
@@ -42,14 +42,14 @@ export async function fetchServerAll() {
   });
 
   if (!r.ok) {
-    throw new Error(`API GET mislukt (${r.status})`);
+    throw new Error(`JSON laden mislukt (${r.status})`);
   }
 
   const payload = await r.json();
   const arr = _asArray(payload);
 
   if (!arr) {
-    throw new Error("API payload is geen lijst");
+    throw new Error("JSON payload is geen lijst");
   }
 
   return arr;
@@ -57,57 +57,31 @@ export async function fetchServerAll() {
 
 export async function loadAll() {
   try {
+    const cached = readCache();
+    if (Array.isArray(cached) && cached.length > 0) {
+      return cached;
+    }
+
     const arr = await fetchServerAll();
     writeCache(arr);
     return arr;
   } catch (e) {
-    console.warn("Server laden mislukt, fallback naar cache:", e);
+    console.warn("Laden mislukt, fallback naar cache:", e);
     return readCache();
   }
 }
 
 export async function saveAll(arr) {
   const data = Array.isArray(arr) ? arr : [];
-
-  const r = await fetch(API_URL, {
-    method: "POST",
-    cache: "no-store",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json"
-    },
-    body: JSON.stringify(data)
-  });
-
-  if (!r.ok) {
-    const txt = await r.text().catch(() => "");
-    throw new Error(`API POST mislukt (${r.status}) ${txt}`);
-  }
-
   writeCache(data);
   return true;
 }
 
 export async function clearAll() {
-  const r = await fetch(API_URL, {
-    method: "POST",
-    cache: "no-store",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json"
-    },
-    body: JSON.stringify([])
-  });
-
-  if (!r.ok) {
-    const txt = await r.text().catch(() => "");
-    throw new Error(`API wissen mislukt (${r.status}) ${txt}`);
-  }
-
   writeCache([]);
   return true;
 }
 
 export async function archiveSeason() {
-  throw new Error("Archiveren is niet voorzien in deze backend.");
+  throw new Error("Archiveren is niet voorzien in deze versie.");
 }
