@@ -1,0 +1,36 @@
+# Git Handleiding – Veilig pushen zonder rebase-problemen
+
+## 1. Basisworkflow (aanrader)
+
+```bash
+pushen
+git add .
+git commit -m "update"
+git push origin main
+
+Eerst syncen
+git pull --rebase origin main
+git push origin main
+
+
+Rebase oplossen
+git rebase --continue
+
+Rebase afbreken
+git rebase --abort
+
+---
+
+## 👇 Snelle volgende stap
+Opslaan als:
+
+
+C:\Users\patri\Documenten\zomertornooien\GIT_HANDLEIDING.md
+
+
+En dan:
+
+```bash
+git add .
+git commit -m "add markdown guide"
+git push
